@@ -6,7 +6,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, RootModel
+from pydantic import BaseModel, RootModel
 
 
 class A2A(RootModel[Any]):
@@ -14,13 +14,11 @@ class A2A(RootModel[Any]):
 
 
 class AgentAuthentication(BaseModel):
-    """Defines authentication requirements for an agent.
+    """
+    Defines authentication requirements for an agent.
     Intended to match OpenAPI authentication structure.
     """
 
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     credentials: str | None = None
     """
     credentials a client should use for private cards
@@ -32,11 +30,10 @@ class AgentAuthentication(BaseModel):
 
 
 class AgentCapabilities(BaseModel):
-    """Defines optional capabilities supported by an agent."""
+    """
+    Defines optional capabilities supported by an agent.
+    """
 
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     pushNotifications: bool | None = None
     """
     true if the agent can notify updates to client
@@ -52,11 +49,10 @@ class AgentCapabilities(BaseModel):
 
 
 class AgentProvider(BaseModel):
-    """Represents the service provider of an agent."""
+    """
+    Represents the service provider of an agent.
+    """
 
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     organization: str
     """
     Agent provider's organization name
@@ -68,11 +64,10 @@ class AgentProvider(BaseModel):
 
 
 class AgentSkill(BaseModel):
-    """Represents a unit of capability that an agent can perform."""
+    """
+    Represents a unit of capability that an agent can perform.
+    """
 
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     description: str
     """
     description of the skill - will be used by the client or a human
@@ -110,11 +105,10 @@ class AgentSkill(BaseModel):
 
 
 class ContentTypeNotSupportedError(BaseModel):
-    """A2A specific error indicating incompatible content types between request and agent capabilities."""
+    """
+    A2A specific error indicating incompatible content types between request and agent capabilities.
+    """
 
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     code: Literal[-32005] = -32005
     """
     A Number that indicates the error type that occurred.
@@ -131,11 +125,10 @@ class ContentTypeNotSupportedError(BaseModel):
 
 
 class DataPart(BaseModel):
-    """Represents a structured data segment within a message part."""
+    """
+    Represents a structured data segment within a message part.
+    """
 
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     data: dict[str, Any]
     """
     Structured data content
@@ -151,11 +144,10 @@ class DataPart(BaseModel):
 
 
 class FileBase(BaseModel):
-    """Represents the base entity for FileParts"""
+    """
+    Represents the base entity for FileParts
+    """
 
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     mimeType: str | None = None
     """
     Optional mimeType for the file
@@ -167,11 +159,10 @@ class FileBase(BaseModel):
 
 
 class FileWithBytes(BaseModel):
-    """Define the variant where 'bytes' is present and 'uri' is absent"""
+    """
+    Define the variant where 'bytes' is present and 'uri' is absent
+    """
 
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     bytes: str
     """
     base64 encoded content of the file
@@ -187,11 +178,10 @@ class FileWithBytes(BaseModel):
 
 
 class FileWithUri(BaseModel):
-    """Define the variant where 'uri' is present and 'bytes' is absent"""
+    """
+    Define the variant where 'uri' is present and 'bytes' is absent
+    """
 
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     mimeType: str | None = None
     """
     Optional mimeType for the file
@@ -204,11 +194,10 @@ class FileWithUri(BaseModel):
 
 
 class InternalError(BaseModel):
-    """JSON-RPC error indicating an internal JSON-RPC error on the server."""
+    """
+    JSON-RPC error indicating an internal JSON-RPC error on the server.
+    """
 
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     code: Literal[-32603] = -32603
     """
     A Number that indicates the error type that occurred.
@@ -225,11 +214,10 @@ class InternalError(BaseModel):
 
 
 class InvalidParamsError(BaseModel):
-    """JSON-RPC error indicating invalid method parameter(s)."""
+    """
+    JSON-RPC error indicating invalid method parameter(s).
+    """
 
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     code: Literal[-32602] = -32602
     """
     A Number that indicates the error type that occurred.
@@ -246,11 +234,10 @@ class InvalidParamsError(BaseModel):
 
 
 class InvalidRequestError(BaseModel):
-    """JSON-RPC error indicating the JSON sent is not a valid Request object."""
+    """
+    JSON-RPC error indicating the JSON sent is not a valid Request object.
+    """
 
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     code: Literal[-32600] = -32600
     """
     A Number that indicates the error type that occurred.
@@ -267,11 +254,10 @@ class InvalidRequestError(BaseModel):
 
 
 class JSONParseError(BaseModel):
-    """JSON-RPC error indicating invalid JSON was received by the server."""
+    """
+    JSON-RPC error indicating invalid JSON was received by the server.
+    """
 
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     code: Literal[-32700] = -32700
     """
     A Number that indicates the error type that occurred.
@@ -288,13 +274,11 @@ class JSONParseError(BaseModel):
 
 
 class JSONRPCError(BaseModel):
-    """Represents a JSON-RPC 2.0 Error object.
-    This is typically included in a JSONRPCResponse when an error occurs.
+    """
+    Represents a JSON-RPC 2.0 Error object.
+    This is typically included in a JSONRPCErrorResponse when an error occurs.
     """
 
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     code: int
     """
     A Number that indicates the error type that occurred.
@@ -310,34 +294,15 @@ class JSONRPCError(BaseModel):
     """
 
 
-class JSONRPCErrorResponse(BaseModel):
-    """Represents a JSON-RPC 2.0 Error Response object."""
-
-    model_config = ConfigDict(
-        extra='forbid',
-    )
-    error: JSONRPCError
-    id: str | int
-    """
-    An identifier established by the Client that MUST contain a String, Number, or NULL value if included.
-    The value SHOULD normally not be Null and Numbers SHOULD NOT contain fractional parts.
-    """
-    jsonrpc: Literal['2.0'] = '2.0'
-    """
-    Specifies the version of the JSON-RPC protocol. MUST be exactly "2.0".
-    """
-
-
 class JSONRPCMessage(BaseModel):
-    """Base interface for any JSON-RPC 2.0 request or response."""
+    """
+    Base interface for any JSON-RPC 2.0 request or response.
+    """
 
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     id: str | int | None = None
     """
-    An identifier established by the Client that MUST contain a String, Number, or NULL value if included.
-    The value SHOULD normally not be Null and Numbers SHOULD NOT contain fractional parts.
+    An identifier established by the Client that MUST contain a String, Number
+    Numbers SHOULD NOT contain fractional parts.
     """
     jsonrpc: Literal['2.0'] = '2.0'
     """
@@ -346,15 +311,14 @@ class JSONRPCMessage(BaseModel):
 
 
 class JSONRPCRequest(BaseModel):
-    """Represents a JSON-RPC 2.0 Request object."""
+    """
+    Represents a JSON-RPC 2.0 Request object.
+    """
 
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     id: str | int | None = None
     """
-    An identifier established by the Client that MUST contain a String, Number, or NULL value if included.
-    The value SHOULD normally not be Null and Numbers SHOULD NOT contain fractional parts.
+    An identifier established by the Client that MUST contain a String, Number
+    Numbers SHOULD NOT contain fractional parts.
     """
     jsonrpc: Literal['2.0'] = '2.0'
     """
@@ -370,37 +334,40 @@ class JSONRPCRequest(BaseModel):
     """
 
 
-class JSONRPCSuccessResponse(BaseModel):
-    """Represents a JSON-RPC 2.0 Success Response object."""
-
-    model_config = ConfigDict(
-        extra='forbid',
-    )
-    id: str | int
+class JSONRPCResult(BaseModel):
     """
-    An identifier established by the Client that MUST contain a String, Number, or NULL value if included.
-    The value SHOULD normally not be Null and Numbers SHOULD NOT contain fractional parts.
+    Represents a JSON-RPC 2.0 Result object.
+    """
+
+    id: str | int | None = None
+    """
+    An identifier established by the Client that MUST contain a String, Number
+    Numbers SHOULD NOT contain fractional parts.
     """
     jsonrpc: Literal['2.0'] = '2.0'
     """
     Specifies the version of the JSON-RPC protocol. MUST be exactly "2.0".
     """
-    result: dict[str, Any]
+    result: Any
+    """
+    The result object on success
+    """
 
 
 class Role(Enum):
-    """message sender's role"""
+    """
+    message sender's role
+    """
 
     agent = 'agent'
     user = 'user'
 
 
 class MethodNotFoundError(BaseModel):
-    """JSON-RPC error indicating the method does not exist or is not available."""
+    """
+    JSON-RPC error indicating the method does not exist or is not available.
+    """
 
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     code: Literal[-32601] = -32601
     """
     A Number that indicates the error type that occurred.
@@ -417,11 +384,10 @@ class MethodNotFoundError(BaseModel):
 
 
 class PartBase(BaseModel):
-    """Base properties common to all message parts."""
+    """
+    Base properties common to all message parts.
+    """
 
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     metadata: dict[str, Any] | None = None
     """
     Optional metadata associated with the part.
@@ -429,11 +395,10 @@ class PartBase(BaseModel):
 
 
 class PushNotificationAuthenticationInfo(BaseModel):
-    """Defines authentication details for push notifications."""
+    """
+    Defines authentication details for push notifications.
+    """
 
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     credentials: str | None = None
     """
     Optional credentials
@@ -445,11 +410,10 @@ class PushNotificationAuthenticationInfo(BaseModel):
 
 
 class PushNotificationConfig(BaseModel):
-    """Configuration for setting up push notifications for task updates."""
+    """
+    Configuration for setting up push notifications for task updates.
+    """
 
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     authentication: PushNotificationAuthenticationInfo | None = None
     token: str | None = None
     """
@@ -462,11 +426,10 @@ class PushNotificationConfig(BaseModel):
 
 
 class PushNotificationNotSupportedError(BaseModel):
-    """A2A specific error indicating the agent does not support push notifications."""
+    """
+    A2A specific error indicating the agent does not support push notifications.
+    """
 
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     code: Literal[-32003] = -32003
     """
     A Number that indicates the error type that occurred.
@@ -483,11 +446,10 @@ class PushNotificationNotSupportedError(BaseModel):
 
 
 class TaskIdParams(BaseModel):
-    """Parameters containing only a task ID, used for simple task operations."""
+    """
+    Parameters containing only a task ID, used for simple task operations.
+    """
 
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     id: str
     """
     task id
@@ -496,11 +458,10 @@ class TaskIdParams(BaseModel):
 
 
 class TaskNotCancelableError(BaseModel):
-    """A2A specific error indicating the task is in a state where it cannot be canceled."""
+    """
+    A2A specific error indicating the task is in a state where it cannot be canceled.
+    """
 
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     code: Literal[-32002] = -32002
     """
     A Number that indicates the error type that occurred.
@@ -517,11 +478,10 @@ class TaskNotCancelableError(BaseModel):
 
 
 class TaskNotFoundError(BaseModel):
-    """A2A specific error indicating the requested task ID was not found."""
+    """
+    A2A specific error indicating the requested task ID was not found.
+    """
 
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     code: Literal[-32001] = -32001
     """
     A Number that indicates the error type that occurred.
@@ -538,11 +498,10 @@ class TaskNotFoundError(BaseModel):
 
 
 class TaskPushNotificationConfig(BaseModel):
-    """Parameters for setting or getting push notification configuration for a task"""
+    """
+    Parameters for setting or getting push notification configuration for a task
+    """
 
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     id: str
     """
     task id
@@ -551,11 +510,10 @@ class TaskPushNotificationConfig(BaseModel):
 
 
 class TaskQueryParams(BaseModel):
-    """Parameters for querying a task, including optional history length."""
+    """
+    Parameters for querying a task, including optional history length.
+    """
 
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     historyLength: int | None = None
     """
     number of recent messages to be retrieved
@@ -568,15 +526,14 @@ class TaskQueryParams(BaseModel):
 
 
 class TaskResubscriptionRequest(BaseModel):
-    """JSON-RPC request model for the 'tasks/resubscribe' method."""
+    """
+    JSON-RPC request model for the 'tasks/resubscribe' method.
+    """
 
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     id: str | int | None = None
     """
-    An identifier established by the Client that MUST contain a String, Number, or NULL value if included.
-    The value SHOULD normally not be Null and Numbers SHOULD NOT contain fractional parts.
+    An identifier established by the Client that MUST contain a String, Number
+    Numbers SHOULD NOT contain fractional parts.
     """
     jsonrpc: Literal['2.0'] = '2.0'
     """
@@ -593,7 +550,9 @@ class TaskResubscriptionRequest(BaseModel):
 
 
 class TaskState(Enum):
-    """Represents the possible states of a Task."""
+    """
+    Represents the possible states of a Task.
+    """
 
     submitted = 'submitted'
     working = 'working'
@@ -606,11 +565,10 @@ class TaskState(Enum):
 
 
 class TextPart(BaseModel):
-    """Represents a text segment within parts."""
+    """
+    Represents a text segment within parts.
+    """
 
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     metadata: dict[str, Any] | None = None
     """
     Optional metadata associated with the part.
@@ -626,11 +584,10 @@ class TextPart(BaseModel):
 
 
 class UnsupportedOperationError(BaseModel):
-    """A2A specific error indicating the requested operation is not supported by the agent."""
+    """
+    A2A specific error indicating the requested operation is not supported by the agent.
+    """
 
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     code: Literal[-32004] = -32004
     """
     A Number that indicates the error type that occurred.
@@ -646,17 +603,43 @@ class UnsupportedOperationError(BaseModel):
     """
 
 
+class A2AError(
+    RootModel[
+        JSONParseError
+        | InvalidRequestError
+        | MethodNotFoundError
+        | InvalidParamsError
+        | InternalError
+        | TaskNotFoundError
+        | TaskNotCancelableError
+        | PushNotificationNotSupportedError
+        | UnsupportedOperationError
+        | ContentTypeNotSupportedError
+    ]
+):
+    root: (
+        JSONParseError
+        | InvalidRequestError
+        | MethodNotFoundError
+        | InvalidParamsError
+        | InternalError
+        | TaskNotFoundError
+        | TaskNotCancelableError
+        | PushNotificationNotSupportedError
+        | UnsupportedOperationError
+        | ContentTypeNotSupportedError
+    )
+
+
 class AgentCard(BaseModel):
-    """An AgentCard conveys key information:
+    """
+    An AgentCard conveys key information:
     - Overall details (version, name, description, uses)
     - Skills: A set of capabilities the agent can perform
     - Default modalities/content types supported by the agent.
     - Authentication requirements
     """
 
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     authentication: AgentAuthentication
     """
     Authentication requirements for the agent.
@@ -707,15 +690,14 @@ class AgentCard(BaseModel):
 
 
 class CancelTaskRequest(BaseModel):
-    """JSON-RPC request model for the 'tasks/cancel' method."""
+    """
+    JSON-RPC request model for the 'tasks/cancel' method.
+    """
 
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     id: str | int | None = None
     """
-    An identifier established by the Client that MUST contain a String, Number, or NULL value if included.
-    The value SHOULD normally not be Null and Numbers SHOULD NOT contain fractional parts.
+    An identifier established by the Client that MUST contain a String, Number
+    Numbers SHOULD NOT contain fractional parts.
     """
     jsonrpc: Literal['2.0'] = '2.0'
     """
@@ -732,11 +714,10 @@ class CancelTaskRequest(BaseModel):
 
 
 class FilePart(BaseModel):
-    """Represents a File segment within parts."""
+    """
+    Represents a File segment within parts.
+    """
 
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     file: FileWithBytes | FileWithUri
     """
     File content either as url or bytes
@@ -752,15 +733,14 @@ class FilePart(BaseModel):
 
 
 class GetTaskPushNotificationRequest(BaseModel):
-    """JSON-RPC request model for the 'tasks/pushNotification/get' method."""
+    """
+    JSON-RPC request model for the 'tasks/pushNotification/get' method.
+    """
 
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     id: str | int | None = None
     """
-    An identifier established by the Client that MUST contain a String, Number, or NULL value if included.
-    The value SHOULD normally not be Null and Numbers SHOULD NOT contain fractional parts.
+    An identifier established by the Client that MUST contain a String, Number
+    Numbers SHOULD NOT contain fractional parts.
     """
     jsonrpc: Literal['2.0'] = '2.0'
     """
@@ -776,34 +756,35 @@ class GetTaskPushNotificationRequest(BaseModel):
     """
 
 
-class GetTaskPushNotificationResponse(BaseModel):
-    """JSON-RPC success response model for the 'tasks/pushNotification/get' method."""
-
-    model_config = ConfigDict(
-        extra='forbid',
-    )
-    id: str | int
+class GetTaskPushNotificationSuccessResponse(BaseModel):
     """
-    An identifier established by the Client that MUST contain a String, Number, or NULL value if included.
-    The value SHOULD normally not be Null and Numbers SHOULD NOT contain fractional parts.
+    JSON-RPC success response model for the 'tasks/pushNotification/get' method.
+    """
+
+    id: str | int | None = None
+    """
+    An identifier established by the Client that MUST contain a String, Number
+    Numbers SHOULD NOT contain fractional parts.
     """
     jsonrpc: Literal['2.0'] = '2.0'
     """
     Specifies the version of the JSON-RPC protocol. MUST be exactly "2.0".
     """
     result: TaskPushNotificationConfig
+    """
+    The result object on success
+    """
 
 
 class GetTaskRequest(BaseModel):
-    """JSON-RPC request model for the 'tasks/get' method."""
+    """
+    JSON-RPC request model for the 'tasks/get' method.
+    """
 
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     id: str | int | None = None
     """
-    An identifier established by the Client that MUST contain a String, Number, or NULL value if included.
-    The value SHOULD normally not be Null and Numbers SHOULD NOT contain fractional parts.
+    An identifier established by the Client that MUST contain a String, Number
+    Numbers SHOULD NOT contain fractional parts.
     """
     jsonrpc: Literal['2.0'] = '2.0'
     """
@@ -819,10 +800,32 @@ class GetTaskRequest(BaseModel):
     """
 
 
-class JSONRPCResponse(RootModel[JSONRPCSuccessResponse | JSONRPCErrorResponse]):
-    root: JSONRPCSuccessResponse | JSONRPCErrorResponse
+class JSONRPCErrorResponse(BaseModel):
     """
-    Represents a JSON-RPC 2.0 Response object.
+    Represents a JSON-RPC 2.0 Error Response object.
+    """
+
+    error: (
+        JSONRPCError
+        | JSONParseError
+        | InvalidRequestError
+        | MethodNotFoundError
+        | InvalidParamsError
+        | InternalError
+        | TaskNotFoundError
+        | TaskNotCancelableError
+        | PushNotificationNotSupportedError
+        | UnsupportedOperationError
+        | ContentTypeNotSupportedError
+    )
+    id: str | int | None = None
+    """
+    An identifier established by the Client that MUST contain a String, Number
+    Numbers SHOULD NOT contain fractional parts.
+    """
+    jsonrpc: Literal['2.0'] = '2.0'
+    """
+    Specifies the version of the JSON-RPC protocol. MUST be exactly "2.0".
     """
 
 
@@ -834,15 +837,14 @@ class Part(RootModel[TextPart | FilePart | DataPart]):
 
 
 class SetTaskPushNotificationRequest(BaseModel):
-    """JSON-RPC request model for the 'tasks/pushNotification/set' method."""
+    """
+    JSON-RPC request model for the 'tasks/pushNotification/set' method.
+    """
 
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     id: str | int | None = None
     """
-    An identifier established by the Client that MUST contain a String, Number, or NULL value if included.
-    The value SHOULD normally not be Null and Numbers SHOULD NOT contain fractional parts.
+    An identifier established by the Client that MUST contain a String, Number
+    Numbers SHOULD NOT contain fractional parts.
     """
     jsonrpc: Literal['2.0'] = '2.0'
     """
@@ -858,30 +860,31 @@ class SetTaskPushNotificationRequest(BaseModel):
     """
 
 
-class SetTaskPushNotificationResponse(BaseModel):
-    """JSON-RPC success response model for the 'tasks/pushNotification/set' method."""
-
-    model_config = ConfigDict(
-        extra='forbid',
-    )
-    id: str | int
+class SetTaskPushNotificationSuccessResponse(BaseModel):
     """
-    An identifier established by the Client that MUST contain a String, Number, or NULL value if included.
-    The value SHOULD normally not be Null and Numbers SHOULD NOT contain fractional parts.
+    JSON-RPC success response model for the 'tasks/pushNotification/set' method.
+    """
+
+    id: str | int | None = None
+    """
+    An identifier established by the Client that MUST contain a String, Number
+    Numbers SHOULD NOT contain fractional parts.
     """
     jsonrpc: Literal['2.0'] = '2.0'
     """
     Specifies the version of the JSON-RPC protocol. MUST be exactly "2.0".
     """
     result: TaskPushNotificationConfig
+    """
+    The result object on success
+    """
 
 
 class Artifact(BaseModel):
-    """Represents an artifact generated for a task task."""
+    """
+    Represents an artifact generated for a task task.
+    """
 
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     description: str | None = None
     """
     Optional description for the artifact
@@ -904,12 +907,20 @@ class Artifact(BaseModel):
     """
 
 
-class Message(BaseModel):
-    """Represents a single message exchanged between user and agent."""
+class GetTaskPushNotificationResponse(
+    RootModel[JSONRPCErrorResponse | GetTaskPushNotificationSuccessResponse]
+):
+    root: JSONRPCErrorResponse | GetTaskPushNotificationSuccessResponse
+    """
+    JSON-RPC response for the 'tasks/pushNotification/set' method.
+    """
 
-    model_config = ConfigDict(
-        extra='forbid',
-    )
+
+class Message(BaseModel):
+    """
+    Represents a single message exchanged between user and agent.
+    """
+
     metadata: dict[str, Any] | None = None
     """
     extension metadata
@@ -924,12 +935,20 @@ class Message(BaseModel):
     """
 
 
-class TaskArtifactUpdateEvent(BaseModel):
-    """sent by server during sendSubscribe or subscribe requests"""
+class SetTaskPushNotificationResponse(
+    RootModel[JSONRPCErrorResponse | SetTaskPushNotificationSuccessResponse]
+):
+    root: JSONRPCErrorResponse | SetTaskPushNotificationSuccessResponse
+    """
+    JSON-RPC response for the 'tasks/pushNotification/set' method.
+    """
 
-    model_config = ConfigDict(
-        extra='forbid',
-    )
+
+class TaskArtifactUpdateEvent(BaseModel):
+    """
+    sent by server during sendSubscribe or subscribe requests
+    """
+
     append: bool | None = None
     """
     Indicates if this artifact appends to a previous one
@@ -953,11 +972,10 @@ class TaskArtifactUpdateEvent(BaseModel):
 
 
 class TaskSendParams(BaseModel):
-    """Sent by the client to the agent to create, continue, or restart a task."""
+    """
+    Sent by the client to the agent to create, continue, or restart a task.
+    """
 
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     historyLength: int | None = None
     """
     number of recent messages to be retrieved
@@ -985,11 +1003,10 @@ class TaskSendParams(BaseModel):
 
 
 class TaskStatus(BaseModel):
-    """TaskState and accompanying message."""
+    """
+    TaskState and accompanying message.
+    """
 
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     message: Message | None = None
     """
     additional status updates for client
@@ -1002,11 +1019,10 @@ class TaskStatus(BaseModel):
 
 
 class TaskStatusUpdateEvent(BaseModel):
-    """sent by server during sendSubscribe or subscribe requests"""
+    """
+    sent by server during sendSubscribe or subscribe requests
+    """
 
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     final: bool
     """
     indicates the end of the event stream
@@ -1023,15 +1039,14 @@ class TaskStatusUpdateEvent(BaseModel):
 
 
 class SendTaskRequest(BaseModel):
-    """JSON-RPC request model for the 'tasks/get' method."""
+    """
+    JSON-RPC request model for the 'tasks/get' method.
+    """
 
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     id: str | int | None = None
     """
-    An identifier established by the Client that MUST contain a String, Number, or NULL value if included.
-    The value SHOULD normally not be Null and Numbers SHOULD NOT contain fractional parts.
+    An identifier established by the Client that MUST contain a String, Number
+    Numbers SHOULD NOT contain fractional parts.
     """
     jsonrpc: Literal['2.0'] = '2.0'
     """
@@ -1048,15 +1063,14 @@ class SendTaskRequest(BaseModel):
 
 
 class SendTaskStreamingRequest(BaseModel):
-    """JSON-RPC request model for the 'tasks/sendSubscribe' method."""
+    """
+    JSON-RPC request model for the 'tasks/sendSubscribe' method.
+    """
 
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     id: str | int | None = None
     """
-    An identifier established by the Client that MUST contain a String, Number, or NULL value if included.
-    The value SHOULD normally not be Null and Numbers SHOULD NOT contain fractional parts.
+    An identifier established by the Client that MUST contain a String, Number
+    Numbers SHOULD NOT contain fractional parts.
     """
     jsonrpc: Literal['2.0'] = '2.0'
     """
@@ -1072,28 +1086,27 @@ class SendTaskStreamingRequest(BaseModel):
     """
 
 
-class SendTaskStreamingResponse(BaseModel):
-    """JSON-RPC success response model for the 'tasks/sendSubscribe' method."""
-
-    model_config = ConfigDict(
-        extra='forbid',
-    )
-    id: str | int
+class SendTaskStreamingSuccessResponse(BaseModel):
     """
-    An identifier established by the Client that MUST contain a String, Number, or NULL value if included.
-    The value SHOULD normally not be Null and Numbers SHOULD NOT contain fractional parts.
+    JSON-RPC success response model for the 'tasks/sendSubscribe' method.
+    """
+
+    id: str | int | None = None
+    """
+    An identifier established by the Client that MUST contain a String, Number
+    Numbers SHOULD NOT contain fractional parts.
     """
     jsonrpc: Literal['2.0'] = '2.0'
     """
     Specifies the version of the JSON-RPC protocol. MUST be exactly "2.0".
     """
     result: TaskStatusUpdateEvent | TaskArtifactUpdateEvent
+    """
+    The result object on success
+    """
 
 
 class Task(BaseModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
     artifacts: list[Artifact] | None = None
     """
     collection of artifacts created by the agent.
@@ -1142,55 +1155,120 @@ class A2ARequest(
     """
 
 
-class CancelTaskResponse(BaseModel):
-    """JSON-RPC success response model for the 'tasks/cancel' method."""
-
-    model_config = ConfigDict(
-        extra='forbid',
-    )
-    id: str | int
+class CancelTaskSuccessResponse(BaseModel):
     """
-    An identifier established by the Client that MUST contain a String, Number, or NULL value if included.
-    The value SHOULD normally not be Null and Numbers SHOULD NOT contain fractional parts.
+    JSON-RPC success response model for the 'tasks/cancel' method.
+    """
+
+    id: str | int | None = None
+    """
+    An identifier established by the Client that MUST contain a String, Number
+    Numbers SHOULD NOT contain fractional parts.
     """
     jsonrpc: Literal['2.0'] = '2.0'
     """
     Specifies the version of the JSON-RPC protocol. MUST be exactly "2.0".
     """
     result: Task
-
-
-class GetTaskResponse(BaseModel):
-    """JSON-RPC success response for the 'tasks/get' method."""
-
-    model_config = ConfigDict(
-        extra='forbid',
-    )
-    id: str | int
     """
-    An identifier established by the Client that MUST contain a String, Number, or NULL value if included.
-    The value SHOULD normally not be Null and Numbers SHOULD NOT contain fractional parts.
+    The result object on success
+    """
+
+
+class GetTaskSuccessResponse(BaseModel):
+    """
+    JSON-RPC success response for the 'tasks/get' method.
+    """
+
+    id: str | int | None = None
+    """
+    An identifier established by the Client that MUST contain a String, Number
+    Numbers SHOULD NOT contain fractional parts.
     """
     jsonrpc: Literal['2.0'] = '2.0'
     """
     Specifies the version of the JSON-RPC protocol. MUST be exactly "2.0".
     """
     result: Task
-
-
-class SendTaskResponse(BaseModel):
-    """JSON-RPC success response model for the 'tasks/get' method."""
-
-    model_config = ConfigDict(
-        extra='forbid',
-    )
-    id: str | int
     """
-    An identifier established by the Client that MUST contain a String, Number, or NULL value if included.
-    The value SHOULD normally not be Null and Numbers SHOULD NOT contain fractional parts.
+    The result object on success
+    """
+
+
+class SendTaskStreamingResponse(
+    RootModel[JSONRPCErrorResponse | SendTaskStreamingSuccessResponse]
+):
+    root: JSONRPCErrorResponse | SendTaskStreamingSuccessResponse
+    """
+    JSON-RPC response model for the 'tasks/sendSubscribe' method.
+    """
+
+
+class SendTaskSuccessResponse(BaseModel):
+    """
+    JSON-RPC success response model for the 'tasks/send' method.
+    """
+
+    id: str | int | None = None
+    """
+    An identifier established by the Client that MUST contain a String, Number
+    Numbers SHOULD NOT contain fractional parts.
     """
     jsonrpc: Literal['2.0'] = '2.0'
     """
     Specifies the version of the JSON-RPC protocol. MUST be exactly "2.0".
     """
     result: Task
+    """
+    The result object on success
+    """
+
+
+class CancelTaskResponse(
+    RootModel[JSONRPCErrorResponse | CancelTaskSuccessResponse]
+):
+    root: JSONRPCErrorResponse | CancelTaskSuccessResponse
+    """
+    JSON-RPC response for the 'tasks/cancel' method.
+    """
+
+
+class GetTaskResponse(RootModel[JSONRPCErrorResponse | GetTaskSuccessResponse]):
+    root: JSONRPCErrorResponse | GetTaskSuccessResponse
+    """
+    JSON-RPC success response for the 'tasks/get' method.
+    """
+
+
+class JSONRPCResponse(
+    RootModel[
+        JSONRPCErrorResponse
+        | SendTaskSuccessResponse
+        | SendTaskStreamingSuccessResponse
+        | GetTaskSuccessResponse
+        | CancelTaskSuccessResponse
+        | SetTaskPushNotificationSuccessResponse
+        | GetTaskPushNotificationSuccessResponse
+    ]
+):
+    root: (
+        JSONRPCErrorResponse
+        | SendTaskSuccessResponse
+        | SendTaskStreamingSuccessResponse
+        | GetTaskSuccessResponse
+        | CancelTaskSuccessResponse
+        | SetTaskPushNotificationSuccessResponse
+        | GetTaskPushNotificationSuccessResponse
+    )
+    """
+    Represents a JSON-RPC 2.0 Response object.
+    """
+
+
+class SendTaskResponse(
+    RootModel[JSONRPCErrorResponse | SendTaskSuccessResponse]
+):
+    root: JSONRPCErrorResponse | SendTaskSuccessResponse
+    """
+    JSON-RPC response model for the 'tasks/send' method.
+    """

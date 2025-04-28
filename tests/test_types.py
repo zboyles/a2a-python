@@ -5,6 +5,7 @@ import pytest
 from pydantic import ValidationError
 
 from a2a.types import (
+    A2AError,
     A2ARequest,
     AgentAuthentication,
     AgentCapabilities,
@@ -33,7 +34,6 @@ from a2a.types import (
     JSONRPCMessage,
     JSONRPCRequest,
     JSONRPCResponse,
-    JSONRPCSuccessResponse,
     Message,
     MethodNotFoundError,
     Part,
@@ -41,7 +41,6 @@ from a2a.types import (
     PushNotificationAuthenticationInfo,
     PushNotificationConfig,
     PushNotificationNotSupportedError,
-    Role,
     SendTaskRequest,
     SendTaskResponse,
     SendTaskStreamingRequest,
@@ -62,8 +61,15 @@ from a2a.types import (
     TaskStatusUpdateEvent,
     TextPart,
     UnsupportedOperationError,
+    GetTaskSuccessResponse,
+    SendTaskStreamingSuccessResponse,
+    SendTaskSuccessResponse,
+    SetTaskPushNotificationSuccessResponse,
+    GetTaskPushNotificationSuccessResponse,
+    CancelTaskSuccessResponse,
+    Role,
 )
-
+import json
 
 # --- Helper Data ---
 
@@ -176,10 +182,10 @@ def test_agent_authentication_invalid():
         AgentAuthentication(
             credentials='only_creds'
         )  # Missing schemes  # type: ignore
-    with pytest.raises(ValidationError):
+
         AgentAuthentication(
             schemes=['Bearer'],
-            extra_field='invalid',  # type: ignore
+            extra_field='extra',  # type: ignore
         )  # Extra field
 
 
@@ -226,11 +232,11 @@ def test_agent_skill_invalid():
         AgentSkill(
             id='abc', name='n', description='d'
         )  # Missing tags  # type: ignore
-    with pytest.raises(ValidationError):
-        AgentSkill(
-            **MINIMAL_AGENT_SKILL,
-            invalid_extra='foo',  # type: ignore
-        )  # Extra field
+
+    AgentSkill(
+        **MINIMAL_AGENT_SKILL,
+        invalid_extra='foo',  # type: ignore
+    )  # Extra field
 
 
 def test_agent_card_valid():
@@ -263,8 +269,8 @@ def test_text_part():
         TextPart(type='text')  # Missing text # type: ignore
     with pytest.raises(ValidationError):
         TextPart(
-            type='file',
-            text='hello',  # type: ignore
+            type='file',  # type: ignore
+            text='hello',
         )  # Wrong type literal
 
 
@@ -299,9 +305,8 @@ def test_file_part_variants():
     # Invalid - wrong type literal
     with pytest.raises(ValidationError):
         FilePart(type='text', file=file_uri)  # type: ignore
-    # Invalid - extra field
-    with pytest.raises(ValidationError):
-        FilePart(**FILE_URI_PART_DATA, extra='bad')  # type: ignore
+
+    FilePart(**FILE_URI_PART_DATA, extra='extra')  # type: ignore
 
 
 def test_data_part():
@@ -353,11 +358,11 @@ def test_message():
 
     with pytest.raises(ValidationError):
         Message(
-            role='invalid_role',
+            role='invalid_role',  # type: ignore
             parts=[TEXT_PART_DATA],  # type: ignore
         )  # Invalid enum
     with pytest.raises(ValidationError):
-        Message(role='user')  # Missing parts  # type: ignore
+        Message(role=Role.user)  # Missing parts  # type: ignore
 
 
 def test_task_status():
@@ -429,26 +434,12 @@ def test_jsonrpc_request():
 
     with pytest.raises(ValidationError):
         JSONRPCRequest(
-            jsonrpc='1.0',
+            jsonrpc='1.0',  # type: ignore
             method='m',
-            id=1,  # type: ignore
+            id=1,
         )  # Wrong version
     with pytest.raises(ValidationError):
         JSONRPCRequest(jsonrpc='2.0', id=1)  # Missing method  # type: ignore
-
-
-def test_jsonrpc_success_response():
-    resp = JSONRPCSuccessResponse(
-        jsonrpc='2.0', result=JSONRPC_SUCCESS_RESULT, id=1
-    )
-    assert resp.jsonrpc == '2.0'
-    assert resp.result == JSONRPC_SUCCESS_RESULT
-    assert resp.id == 1
-
-    with pytest.raises(ValidationError):
-        JSONRPCSuccessResponse(
-            jsonrpc='2.0', id=1
-        )  # Missing result # type: ignore
 
 
 def test_jsonrpc_error_response():
@@ -469,13 +460,12 @@ def test_jsonrpc_response_root_model() -> None:
     # Success case
     success_data: dict[str, Any] = {
         'jsonrpc': '2.0',
-        'result': {'status': 'ok'},
+        'result': MINIMAL_TASK,
         'id': 1,
     }
     resp_success = JSONRPCResponse.model_validate(success_data)
-    assert isinstance(resp_success.root, JSONRPCSuccessResponse)
-    assert resp_success.root.result == {'status': 'ok'}
-    assert resp_success.model_dump(exclude_none=True) == success_data
+    assert isinstance(resp_success.root, SendTaskSuccessResponse)
+    assert resp_success.root.result == Task(**MINIMAL_TASK)
 
     # Error case
     error_data: dict[str, Any] = {
@@ -581,14 +571,26 @@ def test_get_task_response() -> None:
         'id': 'resp-1',
     }
     resp = GetTaskResponse.model_validate(resp_data)
-    assert resp.id == 'resp-1'
-    assert isinstance(resp.result, Task)
-    assert resp.result.id == 'task-abc'
+    assert resp.root.id == 'resp-1'
+    assert isinstance(resp.root, GetTaskSuccessResponse)
+    assert isinstance(resp.root.result, Task)
+    assert resp.root.result.id == 'task-abc'
 
     with pytest.raises(ValidationError):  # Result is not a Task
         GetTaskResponse.model_validate(
             {'jsonrpc': '2.0', 'result': {'wrong': 'data'}, 'id': 1}
         )
+
+    resp_data_err: dict[str, Any] = {
+        'jsonrpc': '2.0',
+        'error': JSONRPCError(**TaskNotFoundError().model_dump()),
+        'id': 'resp-1',
+    }
+    resp_err = GetTaskResponse.model_validate(resp_data_err)
+    assert resp_err.root.id == 'resp-1'
+    assert isinstance(resp_err.root, JSONRPCErrorResponse)
+    assert resp_err.root.error is not None
+    assert isinstance(resp_err.root.error, JSONRPCError)
 
 
 def test_send_task_response() -> None:
@@ -598,14 +600,26 @@ def test_send_task_response() -> None:
         'id': 'resp-1',
     }
     resp = SendTaskResponse.model_validate(resp_data)
-    assert resp.id == 'resp-1'
-    assert isinstance(resp.result, Task)
-    assert resp.result.id == 'task-abc'
+    assert resp.root.id == 'resp-1'
+    assert isinstance(resp.root, SendTaskSuccessResponse)
+    assert isinstance(resp.root.result, Task)
+    assert resp.root.result.id == 'task-abc'
 
     with pytest.raises(ValidationError):  # Result is not a Task
         SendTaskResponse.model_validate(
             {'jsonrpc': '2.0', 'result': {'wrong': 'data'}, 'id': 1}
         )
+
+    resp_data_err: dict[str, Any] = {
+        'jsonrpc': '2.0',
+        'error': JSONRPCError(**TaskNotFoundError().model_dump()),
+        'id': 'resp-1',
+    }
+    resp_err = SendTaskResponse.model_validate(resp_data_err)
+    assert resp_err.root.id == 'resp-1'
+    assert isinstance(resp_err.root, JSONRPCErrorResponse)
+    assert resp_err.root.error is not None
+    assert isinstance(resp_err.root.error, JSONRPCError)
 
 
 def test_cancel_task_response() -> None:
@@ -615,9 +629,21 @@ def test_cancel_task_response() -> None:
         'id': 1,
     }
     resp = CancelTaskResponse.model_validate(resp_data)
-    assert resp.id == 1
-    assert isinstance(resp.result, Task)
-    assert resp.result.id == 'task-abc'
+    assert resp.root.id == 1
+    assert isinstance(resp.root, CancelTaskSuccessResponse)
+    assert isinstance(resp.root.result, Task)
+    assert resp.root.result.id == 'task-abc'
+
+    resp_data_err: dict[str, Any] = {
+        'jsonrpc': '2.0',
+        'error': JSONRPCError(**TaskNotFoundError().model_dump()),
+        'id': 'resp-1',
+    }
+    resp_err = CancelTaskResponse.model_validate(resp_data_err)
+    assert resp_err.root.id == 'resp-1'
+    assert isinstance(resp_err.root, JSONRPCErrorResponse)
+    assert resp_err.root.error is not None
+    assert isinstance(resp_err.root.error, JSONRPCError)
 
 
 def test_send_task_streaming_status_update_response() -> None:
@@ -633,11 +659,12 @@ def test_send_task_streaming_status_update_response() -> None:
         'result': task_status_update_event_data,
     }
     response = SendTaskStreamingResponse.model_validate(event_data)
-    assert response.id == 1
-    assert isinstance(response.result, TaskStatusUpdateEvent)
-    assert response.result.status.state == TaskState.submitted
-    assert response.result.id == '1'
-    assert not response.result.final
+    assert response.root.id == 1
+    assert isinstance(response.root, SendTaskStreamingSuccessResponse)
+    assert isinstance(response.root.result, TaskStatusUpdateEvent)
+    assert response.root.result.status.state == TaskState.submitted
+    assert response.root.result.id == '1'
+    assert not response.root.result.final
 
     with pytest.raises(
         ValidationError
@@ -652,9 +679,21 @@ def test_send_task_streaming_status_update_response() -> None:
         'result': {**task_status_update_event_data, 'final': True},
     }
     response = SendTaskStreamingResponse.model_validate(event_data)
-    assert response.id == 1
-    assert isinstance(response.result, TaskStatusUpdateEvent)
-    assert response.result.final
+    assert response.root.id == 1
+    assert isinstance(response.root, SendTaskStreamingSuccessResponse)
+    assert isinstance(response.root.result, TaskStatusUpdateEvent)
+    assert response.root.result.final
+
+    resp_data_err: dict[str, Any] = {
+        'jsonrpc': '2.0',
+        'error': JSONRPCError(**TaskNotFoundError().model_dump()),
+        'id': 'resp-1',
+    }
+    resp_err = SendTaskStreamingResponse.model_validate(resp_data_err)
+    assert resp_err.root.id == 'resp-1'
+    assert isinstance(resp_err.root, JSONRPCErrorResponse)
+    assert resp_err.root.error is not None
+    assert isinstance(resp_err.root.error, JSONRPCError)
 
 
 def test_send_task_streaming_artifact_update_response() -> None:
@@ -677,16 +716,17 @@ def test_send_task_streaming_artifact_update_response() -> None:
         'result': task_artifact_update_event_data,
     }
     response = SendTaskStreamingResponse.model_validate(event_data)
-    assert response.id == 1
-    assert isinstance(response.result, TaskArtifactUpdateEvent)
-    assert response.result.artifact.index == 0
-    assert response.result.artifact.name == 'result_data'
-    assert response.result.id == 'task_id'
-    assert not response.result.append
-    assert response.result.lastChunk
-    assert len(response.result.artifact.parts) == 2
-    assert isinstance(response.result.artifact.parts[0].root, TextPart)
-    assert isinstance(response.result.artifact.parts[1].root, DataPart)
+    assert response.root.id == 1
+    assert isinstance(response.root, SendTaskStreamingSuccessResponse)
+    assert isinstance(response.root.result, TaskArtifactUpdateEvent)
+    assert response.root.result.artifact.index == 0
+    assert response.root.result.artifact.name == 'result_data'
+    assert response.root.result.id == 'task_id'
+    assert not response.root.result.append
+    assert response.root.result.lastChunk
+    assert len(response.root.result.artifact.parts) == 2
+    assert isinstance(response.root.result.artifact.parts[0].root, TextPart)
+    assert isinstance(response.root.result.artifact.parts[1].root, DataPart)
 
 
 def test_set_task_push_notification_response() -> None:
@@ -702,12 +742,13 @@ def test_set_task_push_notification_response() -> None:
         'id': 1,
     }
     resp = SetTaskPushNotificationResponse.model_validate(resp_data)
-    assert resp.id == 1
-    assert isinstance(resp.result, TaskPushNotificationConfig)
-    assert resp.result.id == 't2'
-    assert resp.result.pushNotificationConfig.url == 'https://example.com'
-    assert resp.result.pushNotificationConfig.token == 'token'
-    assert resp.result.pushNotificationConfig.authentication is None
+    assert resp.root.id == 1
+    assert isinstance(resp.root, SetTaskPushNotificationSuccessResponse)
+    assert isinstance(resp.root.result, TaskPushNotificationConfig)
+    assert resp.root.result.id == 't2'
+    assert resp.root.result.pushNotificationConfig.url == 'https://example.com'
+    assert resp.root.result.pushNotificationConfig.token == 'token'
+    assert resp.root.result.pushNotificationConfig.authentication is None
 
     auth_info_dict: dict[str, Any] = {
         'schemes': ['Bearer', 'Basic'],
@@ -722,15 +763,27 @@ def test_set_task_push_notification_response() -> None:
         'id': 1,
     }
     resp = SetTaskPushNotificationResponse.model_validate(resp_data)
-    assert resp.result.pushNotificationConfig.authentication is not None
-    assert resp.result.pushNotificationConfig.authentication.schemes == [
+    assert isinstance(resp.root, SetTaskPushNotificationSuccessResponse)
+    assert resp.root.result.pushNotificationConfig.authentication is not None
+    assert resp.root.result.pushNotificationConfig.authentication.schemes == [
         'Bearer',
         'Basic',
     ]
     assert (
-        resp.result.pushNotificationConfig.authentication.credentials
+        resp.root.result.pushNotificationConfig.authentication.credentials
         == 'user:pass'
     )
+
+    resp_data_err: dict[str, Any] = {
+        'jsonrpc': '2.0',
+        'error': JSONRPCError(**TaskNotFoundError().model_dump()),
+        'id': 'resp-1',
+    }
+    resp_err = SetTaskPushNotificationResponse.model_validate(resp_data_err)
+    assert resp_err.root.id == 'resp-1'
+    assert isinstance(resp_err.root, JSONRPCErrorResponse)
+    assert resp_err.root.error is not None
+    assert isinstance(resp_err.root.error, JSONRPCError)
 
 
 def test_get_task_push_notification_response() -> None:
@@ -746,12 +799,13 @@ def test_get_task_push_notification_response() -> None:
         'id': 1,
     }
     resp = GetTaskPushNotificationResponse.model_validate(resp_data)
-    assert resp.id == 1
-    assert isinstance(resp.result, TaskPushNotificationConfig)
-    assert resp.result.id == 't2'
-    assert resp.result.pushNotificationConfig.url == 'https://example.com'
-    assert resp.result.pushNotificationConfig.token == 'token'
-    assert resp.result.pushNotificationConfig.authentication is None
+    assert resp.root.id == 1
+    assert isinstance(resp.root, GetTaskPushNotificationSuccessResponse)
+    assert isinstance(resp.root.result, TaskPushNotificationConfig)
+    assert resp.root.result.id == 't2'
+    assert resp.root.result.pushNotificationConfig.url == 'https://example.com'
+    assert resp.root.result.pushNotificationConfig.token == 'token'
+    assert resp.root.result.pushNotificationConfig.authentication is None
 
     auth_info_dict: dict[str, Any] = {
         'schemes': ['Bearer', 'Basic'],
@@ -766,15 +820,27 @@ def test_get_task_push_notification_response() -> None:
         'id': 1,
     }
     resp = GetTaskPushNotificationResponse.model_validate(resp_data)
-    assert resp.result.pushNotificationConfig.authentication is not None
-    assert resp.result.pushNotificationConfig.authentication.schemes == [
+    assert isinstance(resp.root, GetTaskPushNotificationSuccessResponse)
+    assert resp.root.result.pushNotificationConfig.authentication is not None
+    assert resp.root.result.pushNotificationConfig.authentication.schemes == [
         'Bearer',
         'Basic',
     ]
     assert (
-        resp.result.pushNotificationConfig.authentication.credentials
+        resp.root.result.pushNotificationConfig.authentication.credentials
         == 'user:pass'
     )
+
+    resp_data_err: dict[str, Any] = {
+        'jsonrpc': '2.0',
+        'error': JSONRPCError(**TaskNotFoundError().model_dump()),
+        'id': 'resp-1',
+    }
+    resp_err = GetTaskPushNotificationResponse.model_validate(resp_data_err)
+    assert resp_err.root.id == 'resp-1'
+    assert isinstance(resp_err.root, JSONRPCErrorResponse)
+    assert resp_err.root.error is not None
+    assert isinstance(resp_err.root.error, JSONRPCError)
 
 
 # --- Test A2ARequest Root Model ---
@@ -904,12 +970,12 @@ def test_content_type_not_supported_error():
             code=-32000,  # type: ignore
             message='Incompatible content types',
         )
-    with pytest.raises(ValidationError):  # Extra field
-        ContentTypeNotSupportedError(
-            code=-32005,
-            message='Incompatible content types',
-            extra='bad',  # type: ignore
-        )
+
+    ContentTypeNotSupportedError(
+        code=-32005,
+        message='Incompatible content types',
+        extra='extra',  # type: ignore
+    )
 
 
 def test_task_not_found_error():
@@ -923,8 +989,8 @@ def test_task_not_found_error():
 
     with pytest.raises(ValidationError):  # Wrong code
         TaskNotFoundError(code=-32000, message='Task not found')  # type: ignore
-    with pytest.raises(ValidationError):  # Extra field
-        TaskNotFoundError(code=-32001, message='Task not found', extra='bad')  # type: ignore
+
+    TaskNotFoundError(code=-32001, message='Task not found', extra='extra')  # type: ignore
 
 
 def test_push_notification_not_supported_error():
@@ -943,7 +1009,7 @@ def test_push_notification_not_supported_error():
         PushNotificationNotSupportedError(
             code=-32001,
             message='Push Notification is not available',
-            extra='bad',  # type: ignore
+            extra='extra',  # type: ignore
         )
 
 
@@ -961,8 +1027,8 @@ def test_internal_error():
 
     with pytest.raises(ValidationError):  # Wrong code
         InternalError(code=-32000, message='Internal error')  # type: ignore
-    with pytest.raises(ValidationError):  # Extra field
-        InternalError(code=-32603, message='Internal error', extra='bad')  # type: ignore
+
+    InternalError(code=-32603, message='Internal error', extra='extra')  # type: ignore
 
 
 def test_invalid_params_error():
@@ -979,12 +1045,12 @@ def test_invalid_params_error():
 
     with pytest.raises(ValidationError):  # Wrong code
         InvalidParamsError(code=-32000, message='Invalid parameters')  # type: ignore
-    with pytest.raises(ValidationError):  # Extra field
-        InvalidParamsError(
-            code=-32602,
-            message='Invalid parameters',
-            extra='bad',  # type: ignore
-        )
+
+    InvalidParamsError(
+        code=-32602,
+        message='Invalid parameters',
+        extra='extra',  # type: ignore
+    )
 
 
 def test_invalid_request_error():
@@ -1002,12 +1068,12 @@ def test_invalid_request_error():
             code=-32000,  # type: ignore
             message='Request payload validation error',
         )
-    with pytest.raises(ValidationError):  # Extra field
-        InvalidRequestError(
-            code=-32600,
-            message='Request payload validation error',
-            extra='bad',  # type: ignore
-        )  # type: ignore
+
+    InvalidRequestError(
+        code=-32600,
+        message='Request payload validation error',
+        extra='extra',  # type: ignore
+    )  # type: ignore
 
 
 def test_json_parse_error():
@@ -1022,8 +1088,8 @@ def test_json_parse_error():
 
     with pytest.raises(ValidationError):  # Wrong code
         JSONParseError(code=-32000, message='Invalid JSON payload')  # type: ignore
-    with pytest.raises(ValidationError):  # Extra field
-        JSONParseError(code=-32700, message='Invalid JSON payload', extra='bad')  # type: ignore
+
+    JSONParseError(code=-32700, message='Invalid JSON payload', extra='extra')  # type: ignore
 
 
 def test_method_not_found_error():
@@ -1038,8 +1104,8 @@ def test_method_not_found_error():
 
     with pytest.raises(ValidationError):  # Wrong code
         JSONParseError(code=-32000, message='Invalid JSON payload')  # type: ignore
-    with pytest.raises(ValidationError):  # Extra field
-        JSONParseError(code=-32700, message='Invalid JSON payload', extra='bad')  # type: ignore
+
+    JSONParseError(code=-32700, message='Invalid JSON payload', extra='extra')  # type: ignore
 
 
 def test_task_not_cancelable_error():
@@ -1057,12 +1123,12 @@ def test_task_not_cancelable_error():
 
     with pytest.raises(ValidationError):  # Wrong code
         JSONParseError(code=-32000, message='Task cannot be canceled')  # type: ignore
-    with pytest.raises(ValidationError):  # Extra field
-        JSONParseError(
-            code=-32700,
-            message='Task cannot be canceled',
-            extra='bad',  # type: ignore
-        )
+
+    JSONParseError(
+        code=-32700,
+        message='Task cannot be canceled',
+        extra='extra',  # type: ignore
+    )
 
 
 def test_unsupported_operation_error():
@@ -1080,8 +1146,8 @@ def test_unsupported_operation_error():
 
     with pytest.raises(ValidationError):  # Wrong code
         JSONParseError(code=-32000, message='Unsupported')  # type: ignore
-    with pytest.raises(ValidationError):  # Extra field
-        JSONParseError(code=-32700, message='Unsupported', extra='bad')  # type: ignore
+
+    JSONParseError(code=-32700, message='Unsupported', extra='extra')  # type: ignore
 
 
 # --- Test TaskIdParams ---
@@ -1109,14 +1175,9 @@ def test_task_id_params_invalid():
         excinfo_missing.value
     )  # Check that 'id' is mentioned in the error
 
-    # Extra field not allowed
     invalid_data = MINIMAL_TASK_ID_PARAMS.copy()
-    invalid_data['extra_field'] = 'not_allowed'
-    with pytest.raises(ValidationError) as excinfo_extra:
-        TaskIdParams(**invalid_data)  # type: ignore
-    assert 'extra_field' in str(
-        excinfo_extra.value
-    )  # Check that the extra field is mentioned
+    invalid_data['extra_field'] = 'allowed'
+    TaskIdParams(**invalid_data)  # type: ignore
 
     # Incorrect type for metadata (should be dict)
     invalid_metadata_type = {'id': 'task-789', 'metadata': 'not_a_dict'}
@@ -1177,16 +1238,6 @@ def test_jsonrpc_message_valid():
         msg_int_id.id == 1
     )  # Pydantic v2 keeps int if possible, but float is in type hint
 
-    # With None ID
-    msg_none_id = JSONRPCMessage(jsonrpc='2.0', id=None)
-    assert msg_none_id.jsonrpc == '2.0'
-    assert msg_none_id.id is None
-
-    # Without ID (defaults to None)
-    msg_no_id = JSONRPCMessage(jsonrpc='2.0')
-    assert msg_no_id.jsonrpc == '2.0'
-    assert msg_no_id.id is None
-
     rpc_message = JSONRPCMessage(id=1)
     assert rpc_message.jsonrpc == '2.0'
     assert rpc_message.id == 1
@@ -1198,9 +1249,7 @@ def test_jsonrpc_message_invalid():
     with pytest.raises(ValidationError):
         JSONRPCMessage(jsonrpc='1.0', id=1)  # type: ignore
 
-    # Extra field not allowed
-    with pytest.raises(ValidationError):
-        JSONRPCMessage(jsonrpc='2.0', id=1, extra_field='invalid')  # type: ignore
+    JSONRPCMessage(jsonrpc='2.0', id=1, extra_field='extra')  # type: ignore
 
     # Invalid ID type (e.g., list) - Pydantic should catch this based on type hints
     with pytest.raises(ValidationError):
@@ -1232,10 +1281,7 @@ def test_file_base_valid():
 
 def test_file_base_invalid():
     """Tests validation errors for FileBase."""
-    # Extra field not allowed
-    with pytest.raises(ValidationError) as excinfo_extra:
-        FileBase(extra_field='not_allowed')  # type: ignore
-    assert 'extra_field' in str(excinfo_extra.value)
+    FileBase(extra_field='allowed')  # type: ignore
 
     # Incorrect type for mimeType
     with pytest.raises(ValidationError) as excinfo_type_mime:
@@ -1262,12 +1308,86 @@ def test_part_base_valid() -> None:
 
 def test_part_base_invalid():
     """Tests validation errors for PartBase."""
-    # Extra field not allowed
-    with pytest.raises(ValidationError) as excinfo_extra:
-        PartBase(extra_field='forbidden')  # type: ignore
-    assert 'extra_field' in str(excinfo_extra.value)
+    PartBase(extra_field='allowed')  # type: ignore
 
     # Incorrect type for metadata (should be dict)
     with pytest.raises(ValidationError) as excinfo_type:
         PartBase(metadata='not_a_dict')  # type: ignore
     assert 'metadata' in str(excinfo_type.value)
+
+
+def test_a2a_error_validation_and_serialization() -> None:
+    """Tests validation and serialization of the A2AError RootModel."""
+
+    # 1. Test JSONParseError
+    json_parse_instance = JSONParseError()
+    json_parse_data = json_parse_instance.model_dump(exclude_none=True)
+    a2a_err_parse = A2AError.model_validate(json_parse_data)
+    assert isinstance(a2a_err_parse.root, JSONParseError)
+
+    # 2. Test InvalidRequestError
+    invalid_req_instance = InvalidRequestError()
+    invalid_req_data = invalid_req_instance.model_dump(exclude_none=True)
+    a2a_err_invalid_req = A2AError.model_validate(invalid_req_data)
+    assert isinstance(a2a_err_invalid_req.root, InvalidRequestError)
+
+    # 3. Test MethodNotFoundError
+    method_not_found_instance = MethodNotFoundError()
+    method_not_found_data = method_not_found_instance.model_dump(
+        exclude_none=True
+    )
+    a2a_err_method = A2AError.model_validate(method_not_found_data)
+    assert isinstance(a2a_err_method.root, MethodNotFoundError)
+
+    # 4. Test InvalidParamsError
+    invalid_params_instance = InvalidParamsError()
+    invalid_params_data = invalid_params_instance.model_dump(exclude_none=True)
+    a2a_err_params = A2AError.model_validate(invalid_params_data)
+    assert isinstance(a2a_err_params.root, InvalidParamsError)
+
+    # 5. Test InternalError
+    internal_err_instance = InternalError()
+    internal_err_data = internal_err_instance.model_dump(exclude_none=True)
+    a2a_err_internal = A2AError.model_validate(internal_err_data)
+    assert isinstance(a2a_err_internal.root, InternalError)
+
+    # 6. Test TaskNotFoundError
+    task_not_found_instance = TaskNotFoundError(data={'taskId': 't1'})
+    task_not_found_data = task_not_found_instance.model_dump(exclude_none=True)
+    a2a_err_task_nf = A2AError.model_validate(task_not_found_data)
+    assert isinstance(a2a_err_task_nf.root, TaskNotFoundError)
+
+    # 7. Test TaskNotCancelableError
+    task_not_cancelable_instance = TaskNotCancelableError()
+    task_not_cancelable_data = task_not_cancelable_instance.model_dump(
+        exclude_none=True
+    )
+    a2a_err_task_nc = A2AError.model_validate(task_not_cancelable_data)
+    assert isinstance(a2a_err_task_nc.root, TaskNotCancelableError)
+
+    # 8. Test PushNotificationNotSupportedError
+    push_not_supported_instance = PushNotificationNotSupportedError()
+    push_not_supported_data = push_not_supported_instance.model_dump(
+        exclude_none=True
+    )
+    a2a_err_push_ns = A2AError.model_validate(push_not_supported_data)
+    assert isinstance(a2a_err_push_ns.root, PushNotificationNotSupportedError)
+
+    # 9. Test UnsupportedOperationError
+    unsupported_op_instance = UnsupportedOperationError()
+    unsupported_op_data = unsupported_op_instance.model_dump(exclude_none=True)
+    a2a_err_unsupported = A2AError.model_validate(unsupported_op_data)
+    assert isinstance(a2a_err_unsupported.root, UnsupportedOperationError)
+
+    # 10. Test ContentTypeNotSupportedError
+    content_type_err_instance = ContentTypeNotSupportedError()
+    content_type_err_data = content_type_err_instance.model_dump(
+        exclude_none=True
+    )
+    a2a_err_content = A2AError.model_validate(content_type_err_data)
+    assert isinstance(a2a_err_content.root, ContentTypeNotSupportedError)
+
+    # 11. Test invalid data (doesn't match any known error code/structure)
+    invalid_data: dict[str, Any] = {'code': -99999, 'message': 'Unknown error'}
+    with pytest.raises(ValidationError):
+        A2AError.model_validate(invalid_data)

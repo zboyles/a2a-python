@@ -113,7 +113,7 @@ convention = "google"
 
 [lint.flake8-annotations]
 mypy-init-return = true
-allow-star-arg-any = false
+allow-star-arg-any = true
 
 [lint.pep8-naming]
 ignore-names = ["test_*", "setUp", "tearDown", "mock_*"]
