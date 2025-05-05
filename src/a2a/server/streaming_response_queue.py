@@ -3,8 +3,8 @@ import asyncio
 from a2a.types import SendTaskStreamingResponse
 
 
-class SSEResponseQueue:
-    """Queue for SSE responses."""
+class StreamingResponseQueue:
+    """Queue for Streaming responses."""
 
     def __init__(self) -> None:
         self.queue: asyncio.Queue[SendTaskStreamingResponse] = asyncio.Queue()

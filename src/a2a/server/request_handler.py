@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator
 
 from a2a.server.agent_proxy import AgentProxy
-from a2a.server.sse_response_queue import SSEResponseQueue
+from a2a.server.streaming_response_queue import StreamingResponseQueue
 from a2a.server.task_store import InMemoryTaskStore, TaskStore
 from a2a.types import (
     A2AError,
@@ -142,29 +142,29 @@ class DefaultA2ARequestHandler(A2ARequestHandler):
                 )
             )
 
-        response: (
-            CancelTaskSuccessResponse | JSONRPCErrorResponse
-        ) = await self.agent_proxy.on_cancel(task, request)
+        response: CancelTaskResponse = await self.agent_proxy.on_cancel(
+            task, request
+        )
 
-        if isinstance(response, CancelTaskSuccessResponse):
-            await self.task_store.save(response.result)
+        if isinstance(response.root, CancelTaskSuccessResponse):
+            await self.task_store.save(response.root.result)
 
-        return CancelTaskResponse(root=response)
+        return response
 
     async def on_send_task(self, request: SendTaskRequest) -> SendTaskResponse:
         """Default handler for 'tasks/send'."""
         task: Task = await self._get_task_obj(request.params)
         await self.task_store.save(task)
 
-        response: (
-            SendTaskSuccessResponse | JSONRPCErrorResponse
-        ) = await self.agent_proxy.on_send(task, request)
+        response: SendTaskResponse = await self.agent_proxy.on_send(
+            task, request
+        )
 
-        if isinstance(response, SendTaskSuccessResponse):
-            task = response.result
+        if isinstance(response.root, SendTaskSuccessResponse):
+            task = response.root.result
             await self.task_store.save(task)
 
-        return SendTaskResponse(root=response)
+        return response
 
     async def on_send_task_subscribe(  # type: ignore
         self,
@@ -211,7 +211,7 @@ class DefaultA2ARequestHandler(A2ARequestHandler):
         request: TaskResubscriptionRequest | SendTaskStreamingRequest,
     ) -> AsyncGenerator[SendTaskStreamingResponse, None]:
         # create a sse_queue that allows streaming responses back to the user
-        sse_queue: SSEResponseQueue = SSEResponseQueue()
+        sse_queue: StreamingResponseQueue = StreamingResponseQueue()
 
         # spawn a task for running the streaming agent
         streaming_task = asyncio.create_task(
@@ -234,7 +234,7 @@ class DefaultA2ARequestHandler(A2ARequestHandler):
 
     async def _execute_streaming_agent_task(
         self,
-        sse_queue: SSEResponseQueue,
+        sse_queue: StreamingResponseQueue,
         task: Task | None,
         request: TaskResubscriptionRequest | SendTaskStreamingRequest,
     ) -> None:

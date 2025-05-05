@@ -3,12 +3,11 @@ from collections.abc import AsyncGenerator
 
 from a2a.types import (
     CancelTaskRequest,
-    CancelTaskSuccessResponse,
-    JSONRPCErrorResponse,
+    CancelTaskResponse,
     SendTaskRequest,
+    SendTaskResponse,
     SendTaskStreamingRequest,
     SendTaskStreamingResponse,
-    SendTaskSuccessResponse,
     Task,
     TaskResubscriptionRequest,
 )
@@ -20,7 +19,7 @@ class AgentProxy(ABC):
     @abstractmethod
     async def on_send(
         self, task: Task, request: SendTaskRequest
-    ) -> SendTaskSuccessResponse | JSONRPCErrorResponse:
+    ) -> SendTaskResponse:
         pass
 
     @abstractmethod
@@ -32,7 +31,7 @@ class AgentProxy(ABC):
     @abstractmethod
     async def on_cancel(
         self, task: Task, request: CancelTaskRequest
-    ) -> CancelTaskSuccessResponse | JSONRPCErrorResponse:
+    ) -> CancelTaskResponse:
         pass
 
     @abstractmethod

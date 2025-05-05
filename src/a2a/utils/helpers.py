@@ -53,7 +53,7 @@ def append_artifact_to_task(task: Task, event: TaskArtifactUpdateEvent) -> None:
         )
 
 
-def get_text_artifact(text: str, index: int) -> Artifact:
+def build_text_artifact(text: str, index: int) -> Artifact:
     """Helper to convert agent text to artifact."""
     text_part = TextPart(text=text)
     part = Part(root=text_part)
