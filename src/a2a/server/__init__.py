@@ -1,4 +1,4 @@
-from a2a.server.agent_proxy import AgentProxy
+from a2a.server.agent_executor import AgentExecutor
 from a2a.server.app import A2AApplication
 from a2a.server.errors import MethodNotImplementedError
 from a2a.server.request_handler import (
@@ -13,7 +13,7 @@ __all__ = [
     'A2AApplication',
     'A2ARequestHandler',
     'A2AServer',
-    'AgentProxy',
+    'AgentExecutor',
     'DefaultA2ARequestHandler',
     'InMemoryTaskStore',
     'MethodNotImplementedError',

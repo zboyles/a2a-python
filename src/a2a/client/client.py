@@ -14,20 +14,20 @@ from a2a.types import (
     AgentCard,
     CancelTaskRequest,
     CancelTaskResponse,
-    GetTaskPushNotificationRequest,
-    GetTaskPushNotificationResponse,
+    GetTaskPushNotificationConfigRequest,
+    GetTaskPushNotificationConfigResponse,
     GetTaskRequest,
     GetTaskResponse,
-    SendTaskRequest,
-    SendTaskResponse,
-    SendTaskStreamingRequest,
-    SendTaskStreamingResponse,
-    SetTaskPushNotificationRequest,
-    SetTaskPushNotificationResponse,
+    MessageSendParams,
+    SendMessageRequest,
+    SendMessageResponse,
+    SendMessageStreamingRequest,
+    SendMessageStreamingResponse,
+    SetTaskPushNotificationConfigRequest,
+    SetTaskPushNotificationConfigResponse,
     TaskIdParams,
     TaskPushNotificationConfig,
     TaskQueryParams,
-    TaskSendParams,
 )
 
 
@@ -92,21 +92,21 @@ class A2AClient:
         ).get_agent_card()
         return A2AClient(httpx_client=httpx_client, agent_card=agent_card)
 
-    async def send_task(
+    async def send_message(
         self, payload: dict[str, Any], request_id: str | int = uuid4().hex
-    ) -> SendTaskResponse:
-        request = SendTaskRequest(
-            id=request_id, params=TaskSendParams.model_validate(payload)
+    ) -> SendMessageResponse:
+        request = SendMessageRequest(
+            id=request_id, params=MessageSendParams.model_validate(payload)
         )
-        return SendTaskResponse(
+        return SendMessageResponse(
             **await self._send_request(A2ARequest(root=request))
         )
 
-    async def send_task_streaming(
+    async def send_message_streaming(
         self, payload: dict[str, Any], request_id: str | int = uuid4().hex
-    ) -> AsyncGenerator[SendTaskStreamingResponse, None]:
-        request = SendTaskStreamingRequest(
-            id=request_id, params=TaskSendParams.model_validate(payload)
+    ) -> AsyncGenerator[SendMessageStreamingResponse, None]:
+        request = SendMessageStreamingRequest(
+            id=request_id, params=MessageSendParams.model_validate(payload)
         )
         async with aconnect_sse(
             self.httpx_client,
@@ -117,7 +117,7 @@ class A2AClient:
         ) as event_source:
             try:
                 async for sse in event_source.aiter_sse():
-                    yield SendTaskStreamingResponse(**json.loads(sse.data))
+                    yield SendMessageStreamingResponse(**json.loads(sse.data))
             except SSEError as e:
                 raise A2AClientHTTPError(
                     400, f'Invalid SSE response or protocol error: {e}'
@@ -163,21 +163,21 @@ class A2AClient:
 
     async def set_task_callback(
         self, payload: dict[str, Any], request_id: str | int = uuid4().hex
-    ) -> SetTaskPushNotificationResponse:
-        request = SetTaskPushNotificationRequest(
+    ) -> SetTaskPushNotificationConfigResponse:
+        request = SetTaskPushNotificationConfigRequest(
             id=request_id,
             params=TaskPushNotificationConfig.model_validate(payload),
         )
-        return SetTaskPushNotificationResponse(
+        return SetTaskPushNotificationConfigResponse(
             **await self._send_request(A2ARequest(root=request))
         )
 
     async def get_task_callback(
         self, payload: dict[str, Any], request_id: str | int = uuid4().hex
-    ) -> GetTaskPushNotificationResponse:
-        request = GetTaskPushNotificationRequest(
+    ) -> GetTaskPushNotificationConfigResponse:
+        request = GetTaskPushNotificationConfigRequest(
             id=request_id, params=TaskIdParams.model_validate(payload)
         )
-        return GetTaskPushNotificationResponse(
+        return GetTaskPushNotificationConfigResponse(
             **await self._send_request(A2ARequest(root=request))
         )

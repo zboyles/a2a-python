@@ -18,7 +18,7 @@ from a2a.types import (
     A2ARequest,
     AgentCard,
     CancelTaskRequest,
-    GetTaskPushNotificationRequest,
+    GetTaskPushNotificationConfigRequest,
     GetTaskRequest,
     InternalError,
     InvalidRequestError,
@@ -26,10 +26,10 @@ from a2a.types import (
     JSONRPCError,
     JSONRPCErrorResponse,
     JSONRPCResponse,
-    SendTaskRequest,
-    SendTaskStreamingRequest,
-    SendTaskStreamingResponse,
-    SetTaskPushNotificationRequest,
+    SendMessageRequest,
+    SendMessageStreamingRequest,
+    SendMessageStreamingResponse,
+    SetTaskPushNotificationConfigRequest,
     TaskResubscriptionRequest,
     UnsupportedOperationError,
 )
@@ -103,7 +103,7 @@ class A2AApplication:
 
             if isinstance(
                 request_obj,
-                TaskResubscriptionRequest | SendTaskStreamingRequest,
+                TaskResubscriptionRequest | SendMessageStreamingRequest,
             ):
                 return await self._process_streaming_request(
                     request_id, a2a_request
@@ -144,9 +144,9 @@ class A2AApplication:
         handler_result: Any = None
         if isinstance(
             request_obj,
-            SendTaskStreamingRequest,
+            SendMessageStreamingRequest,
         ):
-            handler_result = self.request_handler.on_send_task_subscribe(
+            handler_result = self.request_handler.on_message_send_stream(
                 request_obj
             )
         elif isinstance(request_obj, TaskResubscriptionRequest):
@@ -168,8 +168,8 @@ class A2AApplication:
         request_obj = a2a_request.root
         handler_result: Any = None
         match request_obj:
-            case SendTaskRequest():
-                handler_result = await self.request_handler.on_send_task(
+            case SendMessageRequest():
+                handler_result = await self.request_handler.on_message_send(
                     request_obj
                 )
             case CancelTaskRequest():
@@ -180,13 +180,13 @@ class A2AApplication:
                 handler_result = await self.request_handler.on_get_task(
                     request_obj
                 )
-            case SetTaskPushNotificationRequest():
+            case SetTaskPushNotificationConfigRequest():
                 handler_result = (
                     await self.request_handler.on_set_task_push_notification(
                         request_obj
                     )
                 )
-            case GetTaskPushNotificationRequest():
+            case GetTaskPushNotificationConfigRequest():
                 handler_result = (
                     await self.request_handler.on_get_task_push_notification(
                         request_obj
@@ -207,7 +207,7 @@ class A2AApplication:
 
     def _create_response(
         self,
-        handler_result: AsyncGenerator[SendTaskStreamingResponse, None]
+        handler_result: AsyncGenerator[SendMessageStreamingResponse, None]
         | JSONRPCErrorResponse
         | JSONRPCResponse,
     ) -> Response:
@@ -226,9 +226,9 @@ class A2AApplication:
             A Starlette JSONResponse or EventSourceResponse.
         """
         if isinstance(handler_result, AsyncGenerator):
-            # Result is a stream of SendTaskStreamingResponse objects
+            # Result is a stream of SendMessageStreamingResponse objects
             async def event_generator(
-                stream: AsyncGenerator[SendTaskStreamingResponse, None],
+                stream: AsyncGenerator[SendMessageStreamingResponse, None],
             ) -> AsyncGenerator[dict[str, str], None]:
                 async for item in stream:
                     yield {'data': item.root.model_dump_json(exclude_none=True)}

@@ -21,8 +21,8 @@ from a2a.types import (
     FilePart,
     FileWithBytes,
     FileWithUri,
-    GetTaskPushNotificationRequest,
-    GetTaskPushNotificationResponse,
+    GetTaskPushNotificationConfigRequest,
+    GetTaskPushNotificationConfigResponse,
     GetTaskRequest,
     GetTaskResponse,
     InternalError,
@@ -41,12 +41,12 @@ from a2a.types import (
     PushNotificationAuthenticationInfo,
     PushNotificationConfig,
     PushNotificationNotSupportedError,
-    SendTaskRequest,
-    SendTaskResponse,
-    SendTaskStreamingRequest,
-    SendTaskStreamingResponse,
-    SetTaskPushNotificationRequest,
-    SetTaskPushNotificationResponse,
+    SendMessageRequest,
+    SendMessageResponse,
+    SendMessageStreamingRequest,
+    SendMessageStreamingResponse,
+    SetTaskPushNotificationConfigRequest,
+    SetTaskPushNotificationConfigResponse,
     Task,
     TaskArtifactUpdateEvent,
     TaskIdParams,
@@ -55,21 +55,20 @@ from a2a.types import (
     TaskPushNotificationConfig,
     TaskQueryParams,
     TaskResubscriptionRequest,
-    TaskSendParams,
+    MessageSendParams,
     TaskState,
     TaskStatus,
     TaskStatusUpdateEvent,
     TextPart,
     UnsupportedOperationError,
     GetTaskSuccessResponse,
-    SendTaskStreamingSuccessResponse,
-    SendTaskSuccessResponse,
-    SetTaskPushNotificationSuccessResponse,
-    GetTaskPushNotificationSuccessResponse,
+    SendMessageStreamingSuccessResponse,
+    SendMessageSuccessResponse,
     CancelTaskSuccessResponse,
     Role,
+    SetTaskPushNotificationConfigSuccessResponse,
+    GetTaskPushNotificationConfigSuccessResponse,
 )
-import json
 
 # --- Helper Data ---
 
@@ -121,12 +120,14 @@ DATA_PART_DATA: dict[str, Any] = {'type': 'data', 'data': {'key': 'value'}}
 MINIMAL_MESSAGE_USER: dict[str, Any] = {
     'role': 'user',
     'parts': [TEXT_PART_DATA],
+    'messageId': 'msg-123',
 }
 
 AGENT_MESSAGE_WITH_FILE: dict[str, Any] = {
     'role': 'agent',
     'parts': [TEXT_PART_DATA, FILE_URI_PART_DATA],
     'metadata': {'timestamp': 'now'},
+    'messageId': 'msg-456',
 }
 
 MINIMAL_TASK_STATUS: dict[str, Any] = {'state': 'submitted'}
@@ -138,16 +139,20 @@ FULL_TASK_STATUS: dict[str, Any] = {
 
 MINIMAL_TASK: dict[str, Any] = {
     'id': 'task-abc',
-    'sessionId': 'session-xyz',
+    'contextId': 'session-xyz',
     'status': MINIMAL_TASK_STATUS,
 }
 FULL_TASK: dict[str, Any] = {
     'id': 'task-abc',
-    'sessionId': 'session-xyz',
+    'contextId': 'session-xyz',
     'status': FULL_TASK_STATUS,
     'history': [MINIMAL_MESSAGE_USER, AGENT_MESSAGE_WITH_FILE],
     'artifacts': [
-        {'index': 0, 'parts': [DATA_PART_DATA], 'name': 'result_data'}
+        {
+            'artifactId': 'artifact-123',
+            'parts': [DATA_PART_DATA],
+            'name': 'result_data',
+        }
     ],
     'metadata': {'priority': 'high'},
 }
@@ -383,7 +388,7 @@ def test_task_status():
 def test_task():
     task = Task(**MINIMAL_TASK)
     assert task.id == 'task-abc'
-    assert task.sessionId == 'session-xyz'
+    assert task.contextId == 'session-xyz'
     assert task.status.state == TaskState.submitted
     assert task.history is None
     assert task.artifacts is None
@@ -464,7 +469,7 @@ def test_jsonrpc_response_root_model() -> None:
         'id': 1,
     }
     resp_success = JSONRPCResponse.model_validate(success_data)
-    assert isinstance(resp_success.root, SendTaskSuccessResponse)
+    assert isinstance(resp_success.root, SendMessageSuccessResponse)
     assert resp_success.root.result == Task(**MINIMAL_TASK)
 
     # Error case
@@ -487,44 +492,40 @@ def test_jsonrpc_response_root_model() -> None:
 # --- Test Request/Response Wrappers ---
 
 
-def test_send_task_request() -> None:
-    params = TaskSendParams(
-        id='task-1', message=Message(**MINIMAL_MESSAGE_USER)
-    )
+def test_send_message_request() -> None:
+    params = MessageSendParams(message=Message(**MINIMAL_MESSAGE_USER))
     req_data: dict[str, Any] = {
         'jsonrpc': '2.0',
-        'method': 'tasks/send',
+        'method': 'message/send',
         'params': params.model_dump(),
         'id': 5,
     }
-    req = SendTaskRequest.model_validate(req_data)
-    assert req.method == 'tasks/send'
-    assert isinstance(req.params, TaskSendParams)
-    assert req.params.id == 'task-1'
+    req = SendMessageRequest.model_validate(req_data)
+    assert req.method == 'message/send'
+    assert isinstance(req.params, MessageSendParams)
     assert req.params.message.role == Role.user
 
     with pytest.raises(ValidationError):  # Wrong method literal
-        SendTaskRequest.model_validate({**req_data, 'method': 'wrong/method'})
+        SendMessageRequest.model_validate(
+            {**req_data, 'method': 'wrong/method'}
+        )
 
 
 def test_send_subscribe_request() -> None:
-    params = TaskSendParams(
-        id='task-1', message=Message(**MINIMAL_MESSAGE_USER)
-    )
+    params = MessageSendParams(message=Message(**MINIMAL_MESSAGE_USER))
     req_data: dict[str, Any] = {
         'jsonrpc': '2.0',
-        'method': 'tasks/sendSubscribe',
+        'method': 'message/sendStream',
         'params': params.model_dump(),
         'id': 5,
     }
-    req = SendTaskStreamingRequest.model_validate(req_data)
-    assert req.method == 'tasks/sendSubscribe'
-    assert isinstance(req.params, TaskSendParams)
-    assert req.params.id == 'task-1'
+    req = SendMessageStreamingRequest.model_validate(req_data)
+    assert req.method == 'message/sendStream'
+    assert isinstance(req.params, MessageSendParams)
     assert req.params.message.role == Role.user
 
     with pytest.raises(ValidationError):  # Wrong method literal
-        SendTaskStreamingRequest.model_validate(
+        SendMessageStreamingRequest.model_validate(
             {**req_data, 'method': 'wrong/method'}
         )
 
@@ -593,20 +594,20 @@ def test_get_task_response() -> None:
     assert isinstance(resp_err.root.error, JSONRPCError)
 
 
-def test_send_task_response() -> None:
+def test_send_message_response() -> None:
     resp_data: dict[str, Any] = {
         'jsonrpc': '2.0',
         'result': MINIMAL_TASK,
         'id': 'resp-1',
     }
-    resp = SendTaskResponse.model_validate(resp_data)
+    resp = SendMessageResponse.model_validate(resp_data)
     assert resp.root.id == 'resp-1'
-    assert isinstance(resp.root, SendTaskSuccessResponse)
+    assert isinstance(resp.root, SendMessageSuccessResponse)
     assert isinstance(resp.root.result, Task)
     assert resp.root.result.id == 'task-abc'
 
     with pytest.raises(ValidationError):  # Result is not a Task
-        SendTaskResponse.model_validate(
+        SendMessageResponse.model_validate(
             {'jsonrpc': '2.0', 'result': {'wrong': 'data'}, 'id': 1}
         )
 
@@ -615,7 +616,7 @@ def test_send_task_response() -> None:
         'error': JSONRPCError(**TaskNotFoundError().model_dump()),
         'id': 'resp-1',
     }
-    resp_err = SendTaskResponse.model_validate(resp_data_err)
+    resp_err = SendMessageResponse.model_validate(resp_data_err)
     assert resp_err.root.id == 'resp-1'
     assert isinstance(resp_err.root, JSONRPCErrorResponse)
     assert resp_err.root.error is not None
@@ -646,11 +647,12 @@ def test_cancel_task_response() -> None:
     assert isinstance(resp_err.root.error, JSONRPCError)
 
 
-def test_send_task_streaming_status_update_response() -> None:
+def test_send_message_streaming_status_update_response() -> None:
     task_status_update_event_data: dict[str, Any] = {
         'status': MINIMAL_TASK_STATUS,
-        'id': '1',
+        'taskId': '1',
         'final': False,
+        'type': 'status-update',
     }
 
     event_data: dict[str, Any] = {
@@ -658,18 +660,18 @@ def test_send_task_streaming_status_update_response() -> None:
         'id': 1,
         'result': task_status_update_event_data,
     }
-    response = SendTaskStreamingResponse.model_validate(event_data)
+    response = SendMessageStreamingResponse.model_validate(event_data)
     assert response.root.id == 1
-    assert isinstance(response.root, SendTaskStreamingSuccessResponse)
+    assert isinstance(response.root, SendMessageStreamingSuccessResponse)
     assert isinstance(response.root.result, TaskStatusUpdateEvent)
     assert response.root.result.status.state == TaskState.submitted
-    assert response.root.result.id == '1'
+    assert response.root.result.taskId == '1'
     assert not response.root.result.final
 
     with pytest.raises(
         ValidationError
     ):  # Result is not a TaskStatusUpdateEvent
-        SendTaskStreamingResponse.model_validate(
+        SendMessageStreamingResponse.model_validate(
             {'jsonrpc': '2.0', 'result': {'wrong': 'data'}, 'id': 1}
         )
 
@@ -678,9 +680,9 @@ def test_send_task_streaming_status_update_response() -> None:
         'id': 1,
         'result': {**task_status_update_event_data, 'final': True},
     }
-    response = SendTaskStreamingResponse.model_validate(event_data)
+    response = SendMessageStreamingResponse.model_validate(event_data)
     assert response.root.id == 1
-    assert isinstance(response.root, SendTaskStreamingSuccessResponse)
+    assert isinstance(response.root, SendMessageStreamingSuccessResponse)
     assert isinstance(response.root.result, TaskStatusUpdateEvent)
     assert response.root.result.final
 
@@ -689,39 +691,40 @@ def test_send_task_streaming_status_update_response() -> None:
         'error': JSONRPCError(**TaskNotFoundError().model_dump()),
         'id': 'resp-1',
     }
-    resp_err = SendTaskStreamingResponse.model_validate(resp_data_err)
+    resp_err = SendMessageStreamingResponse.model_validate(resp_data_err)
     assert resp_err.root.id == 'resp-1'
     assert isinstance(resp_err.root, JSONRPCErrorResponse)
     assert resp_err.root.error is not None
     assert isinstance(resp_err.root.error, JSONRPCError)
 
 
-def test_send_task_streaming_artifact_update_response() -> None:
+def test_send_message_streaming_artifact_update_response() -> None:
     text_part = TextPart(**TEXT_PART_DATA)
     data_part = DataPart(**DATA_PART_DATA)
     artifact = Artifact(
-        index=0,
+        artifactId='artifact-123',
         name='result_data',
         parts=[Part(root=text_part), Part(root=data_part)],
     )
     task_artifact_update_event_data: dict[str, Any] = {
         'artifact': artifact,
-        'id': 'task_id',
+        'taskId': 'task_id',
         'append': False,
         'lastChunk': True,
+        'type': 'artifact-update',
     }
     event_data: dict[str, Any] = {
         'jsonrpc': '2.0',
         'id': 1,
         'result': task_artifact_update_event_data,
     }
-    response = SendTaskStreamingResponse.model_validate(event_data)
+    response = SendMessageStreamingResponse.model_validate(event_data)
     assert response.root.id == 1
-    assert isinstance(response.root, SendTaskStreamingSuccessResponse)
+    assert isinstance(response.root, SendMessageStreamingSuccessResponse)
     assert isinstance(response.root.result, TaskArtifactUpdateEvent)
-    assert response.root.result.artifact.index == 0
+    assert response.root.result.artifact.artifactId == 'artifact-123'
     assert response.root.result.artifact.name == 'result_data'
-    assert response.root.result.id == 'task_id'
+    assert response.root.result.taskId == 'task_id'
     assert not response.root.result.append
     assert response.root.result.lastChunk
     assert len(response.root.result.artifact.parts) == 2
@@ -731,7 +734,7 @@ def test_send_task_streaming_artifact_update_response() -> None:
 
 def test_set_task_push_notification_response() -> None:
     task_push_config = TaskPushNotificationConfig(
-        id='t2',
+        taskId='t2',
         pushNotificationConfig=PushNotificationConfig(
             url='https://example.com', token='token'
         ),
@@ -741,11 +744,11 @@ def test_set_task_push_notification_response() -> None:
         'result': task_push_config.model_dump(),
         'id': 1,
     }
-    resp = SetTaskPushNotificationResponse.model_validate(resp_data)
+    resp = SetTaskPushNotificationConfigResponse.model_validate(resp_data)
     assert resp.root.id == 1
-    assert isinstance(resp.root, SetTaskPushNotificationSuccessResponse)
+    assert isinstance(resp.root, SetTaskPushNotificationConfigSuccessResponse)
     assert isinstance(resp.root.result, TaskPushNotificationConfig)
-    assert resp.root.result.id == 't2'
+    assert resp.root.result.taskId == 't2'
     assert resp.root.result.pushNotificationConfig.url == 'https://example.com'
     assert resp.root.result.pushNotificationConfig.token == 'token'
     assert resp.root.result.pushNotificationConfig.authentication is None
@@ -762,8 +765,8 @@ def test_set_task_push_notification_response() -> None:
         'result': task_push_config.model_dump(),
         'id': 1,
     }
-    resp = SetTaskPushNotificationResponse.model_validate(resp_data)
-    assert isinstance(resp.root, SetTaskPushNotificationSuccessResponse)
+    resp = SetTaskPushNotificationConfigResponse.model_validate(resp_data)
+    assert isinstance(resp.root, SetTaskPushNotificationConfigSuccessResponse)
     assert resp.root.result.pushNotificationConfig.authentication is not None
     assert resp.root.result.pushNotificationConfig.authentication.schemes == [
         'Bearer',
@@ -779,7 +782,9 @@ def test_set_task_push_notification_response() -> None:
         'error': JSONRPCError(**TaskNotFoundError().model_dump()),
         'id': 'resp-1',
     }
-    resp_err = SetTaskPushNotificationResponse.model_validate(resp_data_err)
+    resp_err = SetTaskPushNotificationConfigResponse.model_validate(
+        resp_data_err
+    )
     assert resp_err.root.id == 'resp-1'
     assert isinstance(resp_err.root, JSONRPCErrorResponse)
     assert resp_err.root.error is not None
@@ -788,7 +793,7 @@ def test_set_task_push_notification_response() -> None:
 
 def test_get_task_push_notification_response() -> None:
     task_push_config = TaskPushNotificationConfig(
-        id='t2',
+        taskId='t2',
         pushNotificationConfig=PushNotificationConfig(
             url='https://example.com', token='token'
         ),
@@ -798,11 +803,11 @@ def test_get_task_push_notification_response() -> None:
         'result': task_push_config.model_dump(),
         'id': 1,
     }
-    resp = GetTaskPushNotificationResponse.model_validate(resp_data)
+    resp = GetTaskPushNotificationConfigResponse.model_validate(resp_data)
     assert resp.root.id == 1
-    assert isinstance(resp.root, GetTaskPushNotificationSuccessResponse)
+    assert isinstance(resp.root, GetTaskPushNotificationConfigSuccessResponse)
     assert isinstance(resp.root.result, TaskPushNotificationConfig)
-    assert resp.root.result.id == 't2'
+    assert resp.root.result.taskId == 't2'
     assert resp.root.result.pushNotificationConfig.url == 'https://example.com'
     assert resp.root.result.pushNotificationConfig.token == 'token'
     assert resp.root.result.pushNotificationConfig.authentication is None
@@ -819,8 +824,8 @@ def test_get_task_push_notification_response() -> None:
         'result': task_push_config.model_dump(),
         'id': 1,
     }
-    resp = GetTaskPushNotificationResponse.model_validate(resp_data)
-    assert isinstance(resp.root, GetTaskPushNotificationSuccessResponse)
+    resp = GetTaskPushNotificationConfigResponse.model_validate(resp_data)
+    assert isinstance(resp.root, GetTaskPushNotificationConfigSuccessResponse)
     assert resp.root.result.pushNotificationConfig.authentication is not None
     assert resp.root.result.pushNotificationConfig.authentication.schemes == [
         'Bearer',
@@ -836,7 +841,9 @@ def test_get_task_push_notification_response() -> None:
         'error': JSONRPCError(**TaskNotFoundError().model_dump()),
         'id': 'resp-1',
     }
-    resp_err = GetTaskPushNotificationResponse.model_validate(resp_data_err)
+    resp_err = GetTaskPushNotificationConfigResponse.model_validate(
+        resp_data_err
+    )
     assert resp_err.root.id == 'resp-1'
     assert isinstance(resp_err.root, JSONRPCErrorResponse)
     assert resp_err.root.error is not None
@@ -847,30 +854,28 @@ def test_get_task_push_notification_response() -> None:
 
 
 def test_a2a_request_root_model() -> None:
-    # SendTaskRequest case
-    send_params = TaskSendParams(
-        id='t1', message=Message(**MINIMAL_MESSAGE_USER)
-    )
+    # SendMessageRequest case
+    send_params = MessageSendParams(message=Message(**MINIMAL_MESSAGE_USER))
     send_req_data: dict[str, Any] = {
         'jsonrpc': '2.0',
-        'method': 'tasks/send',
+        'method': 'message/send',
         'params': send_params.model_dump(),
         'id': 1,
     }
     a2a_req_send = A2ARequest.model_validate(send_req_data)
-    assert isinstance(a2a_req_send.root, SendTaskRequest)
-    assert a2a_req_send.root.method == 'tasks/send'
+    assert isinstance(a2a_req_send.root, SendMessageRequest)
+    assert a2a_req_send.root.method == 'message/send'
 
-    # SendTaskStreamingRequest case
+    # SendMessageStreamingRequest case
     send_subs_req_data: dict[str, Any] = {
         'jsonrpc': '2.0',
-        'method': 'tasks/sendSubscribe',
+        'method': 'message/sendStream',
         'params': send_params.model_dump(),
         'id': 1,
     }
     a2a_req_send_subs = A2ARequest.model_validate(send_subs_req_data)
-    assert isinstance(a2a_req_send_subs.root, SendTaskStreamingRequest)
-    assert a2a_req_send_subs.root.method == 'tasks/sendSubscribe'
+    assert isinstance(a2a_req_send_subs.root, SendMessageStreamingRequest)
+    assert a2a_req_send_subs.root.method == 'message/sendStream'
 
     # GetTaskRequest case
     get_params = TaskQueryParams(id='t2')
@@ -896,38 +901,46 @@ def test_a2a_request_root_model() -> None:
     assert isinstance(a2a_req_cancel.root, CancelTaskRequest)
     assert a2a_req_cancel.root.method == 'tasks/cancel'
 
-    # SetTaskPushNotificationRequest
+    # SetTaskPushNotificationConfigRequest
     task_push_config = TaskPushNotificationConfig(
-        id='t2',
+        taskId='t2',
         pushNotificationConfig=PushNotificationConfig(
             url='https://example.com', token='token'
         ),
     )
     set_push_notif_req_data: dict[str, Any] = {
         'jsonrpc': '2.0',
-        'method': 'tasks/pushNotification/set',
+        'method': 'tasks/pushNotificationConfig/set',
         'params': task_push_config.model_dump(),
-        'id': 2,
+        'taskId': 2,
     }
     a2a_req_set_push_req = A2ARequest.model_validate(set_push_notif_req_data)
-    assert isinstance(a2a_req_set_push_req.root, SetTaskPushNotificationRequest)
+    assert isinstance(
+        a2a_req_set_push_req.root, SetTaskPushNotificationConfigRequest
+    )
     assert isinstance(
         a2a_req_set_push_req.root.params, TaskPushNotificationConfig
     )
-    assert a2a_req_set_push_req.root.method == 'tasks/pushNotification/set'
+    assert (
+        a2a_req_set_push_req.root.method == 'tasks/pushNotificationConfig/set'
+    )
 
-    # GetTaskPushNotificationRequest
+    # GetTaskPushNotificationConfigRequest
     id_params = TaskIdParams(id='t2')
     get_push_notif_req_data: dict[str, Any] = {
         'jsonrpc': '2.0',
-        'method': 'tasks/pushNotification/get',
+        'method': 'tasks/pushNotificationConfig/get',
         'params': id_params.model_dump(),
-        'id': 2,
+        'taskId': 2,
     }
     a2a_req_get_push_req = A2ARequest.model_validate(get_push_notif_req_data)
-    assert isinstance(a2a_req_get_push_req.root, GetTaskPushNotificationRequest)
+    assert isinstance(
+        a2a_req_get_push_req.root, GetTaskPushNotificationConfigRequest
+    )
     assert isinstance(a2a_req_get_push_req.root.params, TaskIdParams)
-    assert a2a_req_get_push_req.root.method == 'tasks/pushNotification/get'
+    assert (
+        a2a_req_get_push_req.root.method == 'tasks/pushNotificationConfig/get'
+    )
 
     # TaskResubscriptionRequest
     task_resubscribe_req_data: dict[str, Any] = {
@@ -1204,15 +1217,15 @@ def test_task_push_notification_config() -> None:
     assert push_notification_config.authentication == auth_info
 
     task_push_notification_config = TaskPushNotificationConfig(
-        id='task-123', pushNotificationConfig=push_notification_config
+        taskId='task-123', pushNotificationConfig=push_notification_config
     )
-    assert task_push_notification_config.id == 'task-123'
+    assert task_push_notification_config.taskId == 'task-123'
     assert (
         task_push_notification_config.pushNotificationConfig
         == push_notification_config
     )
     assert task_push_notification_config.model_dump(exclude_none=True) == {
-        'id': 'task-123',
+        'taskId': 'task-123',
         'pushNotificationConfig': {
             'url': 'https://example.com',
             'token': 'token',
