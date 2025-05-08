@@ -9,7 +9,7 @@ from a2a.utils.message import (
     get_text_parts,
     new_agent_text_message,
 )
-from a2a.utils.task import new_task
+from a2a.utils.task import TaskUpdater, new_task
 
 
 __all__ = [
@@ -21,4 +21,5 @@ __all__ = [
     'new_agent_text_message',
     'new_task',
     'new_text_artifact',
+    'TaskUpdater',
 ]

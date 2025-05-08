@@ -577,6 +577,7 @@ class TaskState(Enum):
     submitted = 'submitted'
     working = 'working'
     input_required = 'input-required'
+    auth_required = 'auth-required'
     completed = 'completed'
     canceled = 'canceled'
     failed = 'failed'
