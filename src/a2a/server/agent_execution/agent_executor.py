@@ -29,7 +29,7 @@ class AgentExecutor(ABC):
         event_queue: EventQueue,
         task: Task | None,
     ) -> None:
-        """Handler for 'message/sendStream' requests."""
+        """Handler for 'message/stream' requests."""
 
     @abstractmethod
     async def on_cancel(

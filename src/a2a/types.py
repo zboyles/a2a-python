@@ -1050,7 +1050,7 @@ class SendMessageRequest(BaseModel):
 
 class SendStreamingMessageRequest(BaseModel):
     """
-    JSON-RPC request model for the 'message/sendStream' method.
+    JSON-RPC request model for the 'message/stream' method.
     """
 
     id: str | int | None = None
@@ -1062,7 +1062,7 @@ class SendStreamingMessageRequest(BaseModel):
     """
     Specifies the version of the JSON-RPC protocol. MUST be exactly "2.0".
     """
-    method: Literal['message/sendStream'] = 'message/sendStream'
+    method: Literal['message/stream'] = 'message/stream'
     """
     A String containing the name of the method to be invoked.
     """
@@ -1278,7 +1278,7 @@ class SendMessageSuccessResponse(BaseModel):
 
 class SendStreamingMessageSuccessResponse(BaseModel):
     """
-    JSON-RPC success response model for the 'message/sendStream' method.
+    JSON-RPC success response model for the 'message/stream' method.
     """
 
     id: str | int | None = None
@@ -1347,5 +1347,5 @@ class SendStreamingMessageResponse(
 ):
     root: JSONRPCErrorResponse | SendStreamingMessageSuccessResponse
     """
-    JSON-RPC response model for the 'message/sendStream' method.
+    JSON-RPC response model for the 'message/stream' method.
     """

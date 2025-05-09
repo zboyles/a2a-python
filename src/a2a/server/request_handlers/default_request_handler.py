@@ -141,7 +141,7 @@ class DefaultA2ARequestHandler(A2ARequestHandler):
         self,
         request: SendStreamingMessageRequest,
     ) -> AsyncGenerator[SendStreamingMessageResponse, None]:
-        """Default handler for 'message/sendStream'."""
+        """Default handler for 'message/stream'."""
         message_send_params: MessageSendParams = request.params
 
         task_manager = TaskManager(

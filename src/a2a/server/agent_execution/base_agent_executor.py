@@ -29,7 +29,7 @@ class BaseAgentExecutor(AgentExecutor):
         event_queue: EventQueue,
         task: Task | None,
     ) -> None:
-        """Handler for 'message/sendStream' requests."""
+        """Handler for 'message/stream' requests."""
         event_queue.enqueue_event(A2AError(UnsupportedOperationError()))
 
     async def on_cancel(

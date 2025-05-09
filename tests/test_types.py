@@ -518,12 +518,12 @@ def test_send_subscribe_request() -> None:
     params = MessageSendParams(message=Message(**MINIMAL_MESSAGE_USER))
     req_data: dict[str, Any] = {
         'jsonrpc': '2.0',
-        'method': 'message/sendStream',
+        'method': 'message/stream',
         'params': params.model_dump(),
         'id': 5,
     }
     req = SendStreamingMessageRequest.model_validate(req_data)
-    assert req.method == 'message/sendStream'
+    assert req.method == 'message/stream'
     assert isinstance(req.params, MessageSendParams)
     assert req.params.message.role == Role.user
 
@@ -874,13 +874,13 @@ def test_a2a_request_root_model() -> None:
     # SendStreamingMessageRequest case
     send_subs_req_data: dict[str, Any] = {
         'jsonrpc': '2.0',
-        'method': 'message/sendStream',
+        'method': 'message/stream',
         'params': send_params.model_dump(),
         'id': 1,
     }
     a2a_req_send_subs = A2ARequest.model_validate(send_subs_req_data)
     assert isinstance(a2a_req_send_subs.root, SendStreamingMessageRequest)
-    assert a2a_req_send_subs.root.method == 'message/sendStream'
+    assert a2a_req_send_subs.root.method == 'message/stream'
 
     # GetTaskRequest case
     get_params = TaskQueryParams(id='t2')
