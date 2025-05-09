@@ -21,8 +21,8 @@ from a2a.types import (
     MessageSendParams,
     SendMessageRequest,
     SendMessageResponse,
-    SendMessageStreamingRequest,
-    SendMessageStreamingResponse,
+    SendStreamingMessageRequest,
+    SendStreamingMessageResponse,
     SetTaskPushNotificationConfigRequest,
     SetTaskPushNotificationConfigResponse,
     TaskIdParams,
@@ -104,8 +104,8 @@ class A2AClient:
 
     async def send_message_streaming(
         self, payload: dict[str, Any], request_id: str | int = uuid4().hex
-    ) -> AsyncGenerator[SendMessageStreamingResponse, None]:
-        request = SendMessageStreamingRequest(
+    ) -> AsyncGenerator[SendStreamingMessageResponse, None]:
+        request = SendStreamingMessageRequest(
             id=request_id, params=MessageSendParams.model_validate(payload)
         )
         async with aconnect_sse(
@@ -117,7 +117,7 @@ class A2AClient:
         ) as event_source:
             try:
                 async for sse in event_source.aiter_sse():
-                    yield SendMessageStreamingResponse(**json.loads(sse.data))
+                    yield SendStreamingMessageResponse(**json.loads(sse.data))
             except SSEError as e:
                 raise A2AClientHTTPError(
                     400, f'Invalid SSE response or protocol error: {e}'

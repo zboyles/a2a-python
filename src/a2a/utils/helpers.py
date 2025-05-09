@@ -1,9 +1,33 @@
 import logging
 
-from a2a.types import Artifact, Part, Task, TaskArtifactUpdateEvent, TextPart
+from uuid import uuid4
+
+from a2a.types import (
+    Artifact,
+    MessageSendParams,
+    Part,
+    Task,
+    TaskArtifactUpdateEvent,
+    TaskState,
+    TaskStatus,
+    TextPart,
+)
 
 
 logger = logging.getLogger(__name__)
+
+
+def create_task_obj(message_send_params: MessageSendParams) -> Task:
+    """Create a new task object from message send params."""
+    if not message_send_params.message.contextId:
+        message_send_params.message.contextId = str(uuid4())
+
+    return Task(
+        id=str(uuid4()),
+        contextId=message_send_params.message.contextId,
+        status=TaskStatus(state=TaskState.submitted),
+        history=[message_send_params.message],
+    )
 
 
 def append_artifact_to_task(task: Task, event: TaskArtifactUpdateEvent) -> None:
