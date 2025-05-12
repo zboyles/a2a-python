@@ -1,19 +1,38 @@
-# A2A SDK
+# A2A SDK (Prototype)
 
-## SDK
+Early version of the A2A Python SDK.
 
-This is the python SDK for A2A compatible agents.
-
-## Type generation from spec
-
-<!-- TODO replace spec.json with the public url so we always get the latest version-->
+## Install SDK
 
 ```bash
-uv run datamodel-codegen --input ./spec.json --input-file-type jsonschema --output ./src/a2a/types.py --target-python-version 3.10 --output-model-type pydantic_v2.BaseModel --disable-timestamp --use-schema-description --use-union-operator --use-field-description --use-default --use-default-kwarg --use-one-literal-as-default --class-name A2A --use-standard-collections
+pip install .
 ```
 
-## Running tests
+## Verify install
+
+```py
+import a2a
+```
+
+## Run Helloworld
+
+Run Remote Agent
 
 ```bash
-uv run pytest
+cd examples/helloworld
+python __main__.py
 ```
+
+In another terminal, run the client
+
+```bash
+python test_client.py
+```
+
+## License
+
+This project is licensed under the terms of the [Apache 2.0 License](LICENSE).
+
+## Contributing
+
+See [CONTRIBUTING.md](../CONTRIBUTING.md) for contribution guidelines.
