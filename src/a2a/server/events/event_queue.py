@@ -1,6 +1,6 @@
 import asyncio
 import logging
-
+from typing import Any
 from pydantic import RootModel
 
 from a2a.types import (
@@ -26,38 +26,19 @@ Event = (
 )
 
 
-class Event1(
-    RootModel[
-        Message
-        | Task
-        | TaskStatusUpdateEvent
-        | TaskArtifactUpdateEvent
-        | A2AError
-        | JSONRPCError
-    ]
-):
-    """Type used for dispatching A2A events to consumers."""
-
-    root: (
-        Message
-        | Task
-        | TaskStatusUpdateEvent
-        | TaskArtifactUpdateEvent
-        | A2AError
-        | JSONRPCError
-    )
-
-
 class EventQueue:
     """Event queue for A2A responses from agent."""
 
     def __init__(self) -> None:
         self.queue: asyncio.Queue[Event] = asyncio.Queue()
+        self._children: list[EventQueue] = []
         logger.debug('EventQueue initialized.')
 
     def enqueue_event(self, event: Event):
         logger.debug(f'Enqueuing event of type: {type(event)}')
         self.queue.put_nowait(event)
+        for child in self._children:
+            child.enqueue_event(event)
 
     async def dequeue_event(self, no_wait: bool = False) -> Event:
         if no_wait:
@@ -76,3 +57,15 @@ class EventQueue:
     def task_done(self) -> None:
         logger.debug('Marking task as done in EventQueue.')
         self.queue.task_done()
+
+    def tap(self) -> Any:
+        """Taps the event queue to branch the future events."""
+        queue = EventQueue()
+        self._children.append(queue)
+        return queue
+
+    def close(self):
+        """Closes the queue for future push events."""
+        self.queue.shutdown()
+        for child in self._children:
+            child.shutdown()

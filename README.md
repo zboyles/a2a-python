@@ -1,5 +1,9 @@
 # A2A SDK
 
+## SDK
+
+This is the python SDK for A2A compatible agents.
+
 ## Type generation from spec
 
 <!-- TODO replace spec.json with the public url so we always get the latest version-->

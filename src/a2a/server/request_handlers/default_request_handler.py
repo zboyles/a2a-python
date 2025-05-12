@@ -1,250 +1,211 @@
 import asyncio
+import functools
 import logging
 import threading
 
 from collections.abc import AsyncGenerator
 
 from a2a.server.agent_execution import AgentExecutor
-from a2a.server.events import EventConsumer, EventQueue
-from a2a.server.request_handlers.request_handler import A2ARequestHandler
-from a2a.server.request_handlers.response_helpers import (
-    build_error_response,
-    prepare_response_object,
-)
-from a2a.server.tasks import InMemoryTaskStore, TaskManager, TaskStore
+from a2a.server.events import EventConsumer, EventQueue, Event
+from a2a.server.request_handlers.request_handler import RequestHandler
+from a2a.server.tasks import TaskManager, TaskStore, ResultAggregator
+from a2a.server.agent_execution import RequestContext
+from a2a.utils.errors import ServerError
+
 from a2a.types import (
-    A2AError,
-    CancelTaskRequest,
-    CancelTaskResponse,
-    CancelTaskSuccessResponse,
-    GetTaskPushNotificationConfigRequest,
-    GetTaskPushNotificationConfigResponse,
-    GetTaskRequest,
-    GetTaskResponse,
-    GetTaskSuccessResponse,
     Message,
     MessageSendParams,
-    SendMessageRequest,
-    SendMessageResponse,
-    SendMessageSuccessResponse,
-    SendStreamingMessageRequest,
-    SendStreamingMessageResponse,
-    SendStreamingMessageSuccessResponse,
-    SetTaskPushNotificationConfigRequest,
-    SetTaskPushNotificationConfigResponse,
     Task,
-    TaskArtifactUpdateEvent,
     TaskIdParams,
-    TaskNotFoundError,
+    TaskPushNotificationConfig,
     TaskQueryParams,
-    TaskResubscriptionRequest,
-    TaskStatusUpdateEvent,
     UnsupportedOperationError,
+    TaskNotFoundError
 )
 
 
 logger = logging.getLogger(__name__)
 
 
-class DefaultA2ARequestHandler(A2ARequestHandler):
+class DefaultRequestHandler(RequestHandler):
     """Default request handler for all incoming requests."""
 
     def __init__(
-        self, agent_executor: AgentExecutor, task_store: TaskStore | None = None
+        self, agent_executor: AgentExecutor, task_store: TaskStore
     ) -> None:
         self.agent_executor = agent_executor
-        self.task_store = task_store or InMemoryTaskStore()
+        self.task_store = task_store
+        # This works for single binary solution. Needs a distributed approach for
+        # true scalable deployment.
+        self._task_queue: dict[str, EventQueue] = {}
 
-    async def on_get_task(self, request: GetTaskRequest) -> GetTaskResponse:
+    async def on_get_task(self, params: TaskQueryParams) -> Task | None:
         """Default handler for 'tasks/get'."""
-        task_query_params: TaskQueryParams = request.params
-
-        task: Task | None = await self.task_store.get(task_query_params.id)
+        task: Task | None = await self.task_store.get(params.id)
         if not task:
-            return build_error_response(
-                request.id, A2AError(TaskNotFoundError()), GetTaskResponse
-            )
+            raise ServerError(error=TaskNotFoundError())
+        return task
 
-        return prepare_response_object(
-            request.id,
-            task,
-            (Task,),
-            GetTaskSuccessResponse,
-            GetTaskResponse,
-        )
-
-    async def on_cancel_task(
-        self, request: CancelTaskRequest
-    ) -> CancelTaskResponse:
+    async def on_cancel_task(self, params: TaskIdParams) -> Task | None:
         """Default handler for 'tasks/cancel'."""
-        task_id_params: TaskIdParams = request.params
-        task: Task | None = await self.task_store.get(task_id_params.id)
+        task: Task | None = await self.task_store.get(params.id)
         if not task:
-            return build_error_response(
-                request.id,
-                A2AError(root=TaskNotFoundError()),
-                CancelTaskResponse,
-            )
+            raise ServerError(error=TaskNotFoundError())
 
         task_manager = TaskManager(
             task_id=task.id,
             context_id=task.contextId,
             task_store=self.task_store,
+            initial_message=None,
         )
+        result_aggregator = ResultAggregator(task_manager)
 
         queue = EventQueue()
-        await self.agent_executor.on_cancel(request, queue, task)
-
-        consumer = EventConsumer(queue, task_manager)
-        result = await consumer.consume_one()
-
-        return prepare_response_object(
-            request.id,
-            result,
-            (Task,),
-            CancelTaskSuccessResponse,
-            CancelTaskResponse,
+        await self.agent_executor.cancel(
+            RequestContext(
+                None,
+                task_id=task.id,
+                context_id=task.contextId,
+                task=task,
+            ),
+            queue
         )
+        consumer = EventConsumer(queue)
+        return await result_aggregator.consume_all(consumer)
+
+    async def _run_event_stream(self, request: RequestContext, queue: EventQueue):
+        await self.agent_executor.execute(request, queue)
+        queue.close()
 
     async def on_message_send(
-        self, request: SendMessageRequest
-    ) -> SendMessageResponse:
-        """Default handler for 'message/send'."""
-        message_send_params: MessageSendParams = request.params
-
+        self, params: MessageSendParams
+    ) -> Message | Task:
+        """Default handler for 'message/send' interface"""
         task_manager = TaskManager(
-            task_id=message_send_params.message.taskId,
-            context_id=message_send_params.message.contextId,
+            task_id=params.message.taskId,
+            context_id=params.message.contextId,
             task_store=self.task_store,
+            initial_message=params.message,
         )
-
-        queue = EventQueue()
-
         task: Task | None = await task_manager.get_task()
         if task:
-            await self._append_message_to_task(message_send_params, task)
-
-        await self.agent_executor.on_message_send(request, queue, task)
-
-        consumer = EventConsumer(queue, task_manager)
-        result = await consumer.consume_one()
-
-        return prepare_response_object(
-            request.id,
-            result,
-            (Task, Message),
-            SendMessageSuccessResponse,
-            SendMessageResponse,
-        )
-
-    async def on_message_send_stream(
-        self,
-        request: SendStreamingMessageRequest,
-    ) -> AsyncGenerator[SendStreamingMessageResponse, None]:
-        """Default handler for 'message/stream'."""
-        message_send_params: MessageSendParams = request.params
-
-        task_manager = TaskManager(
-            task_id=message_send_params.message.taskId,
-            context_id=message_send_params.message.contextId,
-            task_store=self.task_store,
-        )
-
+            task = task_manager.update_with_message(params.message, task)
+        result_aggregator = ResultAggregator(task_manager)
+        # TODO to manage the non-blocking flows.
         queue = EventQueue()
-        task: Task | None = await task_manager.get_task()
-        if task:
-            await self._append_message_to_task(message_send_params, task)
-
         def _run_agent_stream() -> None:
             asyncio.run(
-                self.agent_executor.on_message_stream(request, queue, task)
+                self._run_event_stream(
+                    RequestContext(
+                        params,
+                        task.id if task else None,
+                        task.contextId if task else None,
+                        task,
+                    ),
+                    queue,
+                )
             )
+
+        # If this is a follow up on an existing task, register the queue now
+        task_id: str | None = task.id if task else None
+        if task:
+            self._task_queue[task_id] = queue
+
+        thread = threading.Thread(target=_run_agent_stream)
+        thread.start()
+        consumer = EventConsumer(queue)
+        # TODO - register the queue for the task upon the first sign it is a task.
+        thread.join()
+        return await result_aggregator.consume_all(consumer)
+
+
+    async def on_message_send_stream(
+        self, params: MessageSendParams
+    ) -> AsyncGenerator[Event, None]:
+        """Default handler for 'message/stream'."""
+        task_manager = TaskManager(
+            task_id=params.message.taskId,
+            context_id=params.message.contextId,
+            task_store=self.task_store,
+            initial_message=params.message,
+        )
+        task: Task | None = await task_manager.get_task()
+
+        if task:
+            task = task_manager.update_with_message(params.message, task)
+
+        result_aggregator = ResultAggregator(task_manager)
+        queue = EventQueue()
+        def _run_agent_stream() -> None:
+            asyncio.run(
+                self._run_event_stream(
+                    RequestContext(
+                        params,
+                        task.id if task else None,
+                        task.contextId if task else None,
+                        task,
+                    ),
+                    queue,
+                )
+            )
+
+        # If this is a follow up on an existing task, register the queue now
+        task_id: str | None = task.id if task else None
+        if task:
+            self._task_queue[task_id] = queue
 
         thread = threading.Thread(target=_run_agent_stream)
         thread.start()
 
-        consumer = EventConsumer(queue, task_manager)
-        async for event in consumer.consume_all():
-            yield prepare_response_object(
-                request.id,
-                event,
-                (Task, Message, TaskArtifactUpdateEvent, TaskStatusUpdateEvent),
-                SendStreamingMessageSuccessResponse,
-                SendStreamingMessageResponse,
-            )
+        consumer = EventConsumer(queue)
+        async for event in result_aggregator.consume_and_emit(consumer):
+            # Now we know we have a Task, register the queue
+            if isinstance(event, Task) and event.id not in self._task_queue:
+                self._task_queue[event.id] = queue
+                task_id = event.id
+            yield event
 
         thread.join()
+        # Now clean up task queue registration
+        if task_id in self._task_queue:
+            del self._task_queue[task_id]
 
     async def on_set_task_push_notification_config(
-        self, request: SetTaskPushNotificationConfigRequest
-    ) -> SetTaskPushNotificationConfigResponse:
+        self, request: TaskPushNotificationConfig
+    ) -> TaskPushNotificationConfig:
         """Default handler for 'tasks/pushNotificationConfig/set'."""
-        return build_error_response(
-            request.id,
-            A2AError(root=UnsupportedOperationError()),
-            SetTaskPushNotificationConfigResponse,
-        )
+        raise UnsupportedOperationError()
 
     async def on_get_task_push_notification_config(
-        self, request: GetTaskPushNotificationConfigRequest
-    ) -> GetTaskPushNotificationConfigResponse:
+        self, request: TaskIdParams
+    ) -> TaskPushNotificationConfig:
         """Default handler for 'tasks/pushNotificationConfig/get'."""
-        return build_error_response(
-            request.id,
-            A2AError(root=UnsupportedOperationError()),
-            GetTaskPushNotificationConfigResponse,
-        )
+        raise UnsupportedOperationError()
 
     async def on_resubscribe_to_task(
-        self, request: TaskResubscriptionRequest
-    ) -> AsyncGenerator[SendStreamingMessageResponse, None]:
+        self, params: TaskIdParams
+    ) -> AsyncGenerator[Event, None]:
         """Default handler for 'tasks/resubscribe'."""
-        task_id_params: TaskIdParams = request.params
-
-        task: Task | None = await self.task_store.get(task_id_params.id)
+        task: Task | None = await self.task_store.get(params.id)
         if not task:
-            yield build_error_response(
-                request.id,
-                A2AError(TaskNotFoundError()),
-                SendStreamingMessageResponse,
-            )
+            raise ServerError(error=TaskNotFoundError())
             return
 
         task_manager = TaskManager(
             task_id=task.id,
             context_id=task.contextId,
             task_store=self.task_store,
+            initial_message=None,
         )
 
-        queue = EventQueue()
+        result_aggregator = ResultAggregator(task_manager)
 
-        def _run_agent_stream() -> None:
-            asyncio.run(
-                self.agent_executor.on_resubscribe(request, queue, task)
-            )
+        # Need to tap the existing queue.
+        if not task.id in self._task_queue:
+            raise ServerError(error=TaskNotFoundError())
+            return
 
-        thread = threading.Thread(target=_run_agent_stream)
-        thread.start()
-
-        consumer = EventConsumer(queue, task_manager)
-        async for event in consumer.consume_all():
-            yield prepare_response_object(
-                request.id,
-                event,
-                (Task, Message, TaskArtifactUpdateEvent, TaskStatusUpdateEvent),
-                SendStreamingMessageSuccessResponse,
-                SendStreamingMessageResponse,
-            )
-
-        thread.join()
-
-    async def _append_message_to_task(
-        self, message_send_params: MessageSendParams, task: Task | None
-    ) -> None:
-        if task:
-            if task.history:
-                task.history.append(message_send_params.message)
-            else:
-                task.history = [message_send_params.message]
-
-            await self.task_store.save(task)
+        queue = self._task_queue[task.id].tap()
+        consumer = EventConsumer(queue)
+        async for event in result_aggregator.consume_and_emit(consumer):
+            yield event

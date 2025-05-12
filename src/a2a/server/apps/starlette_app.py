@@ -1,5 +1,6 @@
 import json
 import logging
+import traceback
 
 from collections.abc import AsyncGenerator
 from typing import Any
@@ -11,8 +12,9 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from a2a.server.errors import MethodNotImplementedError
-from a2a.server.request_handlers.request_handler import A2ARequestHandler
+from a2a.utils.errors import MethodNotImplementedError
+from a2a.server.request_handlers.jsonrpc_handler import RequestHandler, JSONRPCHandler
+from a2a.server.events.event_queue import Event
 from a2a.types import (
     A2AError,
     A2ARequest,
@@ -38,7 +40,7 @@ from a2a.types import (
 logger = logging.getLogger(__name__)
 
 
-class A2AApplication:
+class A2AStarletteApplication:
     """A Starlette application implementing the A2A protocol server endpoints.
 
     Handles incoming JSON-RPC requests, routes them to the appropriate
@@ -46,16 +48,16 @@ class A2AApplication:
     """
 
     def __init__(
-        self, agent_card: AgentCard, request_handler: A2ARequestHandler
+        self, agent_card: AgentCard, http_handler: RequestHandler
     ):
         """Initializes the A2AApplication.
 
         Args:
             agent_card: The AgentCard describing the agent's capabilities.
-            request_handler: The handler instance responsible for processing A2A requests.
+            http_handler: The handler instance responsible for processing A2A requests via http.
         """
         self.agent_card = agent_card
-        self.request_handler = request_handler
+        self.handler = JSONRPCHandler(agent_card=agent_card, request_handler=http_handler)
 
     def _generate_error_response(
         self, request_id: str | int | None, error: JSONRPCError | A2AError
@@ -72,16 +74,15 @@ class A2AApplication:
             or isinstance(error.root, InternalError)
             else logging.WARNING
         )
-        error_details = f"Code={error_resp.error.code}, Message='{error_resp.error.message}'"
-        if error_resp.error.data is not None:
-            error_details += f', Data={str(error_resp.error.data)}'
-
         logger.log(
             log_level,
-            f'Request Error (ID: {request_id}): {error_details}',
+            f'Request Error (ID: {request_id}: '
+            f"Code={error_resp.error.code}, Message='{error_resp.error.message}'"
+            f'{", Data=" + str(error_resp.error.data) if hasattr(error, "data") and error_resp.error.data else ""}',
         )
         return JSONResponse(
-            error_resp.model_dump(mode='json', exclude_none=True)
+            error_resp.model_dump(mode='json', exclude_none=True),
+            status_code=200,
         )
 
     async def _handle_requests(self, request: Request) -> Response:
@@ -93,16 +94,14 @@ class A2AApplication:
         returning appropriate JSON-RPC error responses.
         """
         request_id = None
+        body = None
+
         try:
             body = await request.json()
             a2a_request = A2ARequest.model_validate(body)
 
             request_id = a2a_request.root.id
             request_obj = a2a_request.root
-
-            logger.info(
-                f'Processing request ID: {request_id}, Method: {request_obj.method}'
-            )
 
             if isinstance(
                 request_obj,
@@ -116,23 +115,24 @@ class A2AApplication:
                 request_id, a2a_request
             )
         except MethodNotImplementedError as e:
+            traceback.print_exc()
             return self._generate_error_response(
                 request_id, A2AError(root=UnsupportedOperationError())
             )
         except json.decoder.JSONDecodeError as e:
+            traceback.print_exc()
             return self._generate_error_response(
                 None, A2AError(root=JSONParseError(message=str(e)))
             )
         except ValidationError as e:
+            traceback.print_exc()
             return self._generate_error_response(
                 request_id,
                 A2AError(root=InvalidRequestError(data=json.loads(e.json()))),
             )
         except Exception as e:
-            logger.error(
-                f'Unhandled exception during request (ID: {request_id}): {e}',
-                exc_info=True,
-            )
+            logger.error(f'Unhandled exception: {e}')
+            traceback.print_exc()
             return self._generate_error_response(
                 request_id, A2AError(root=InternalError(message=str(e)))
             )
@@ -146,24 +146,15 @@ class A2AApplication:
             request_id: The ID of the request.
             a2a_request: The validated A2ARequest object.
         """
-        logger.debug(
-            'Processing the streaming request with id %s and type %s',
-            request_id,
-            type(a2a_request.root),
-        )
         request_obj = a2a_request.root
         handler_result: Any = None
         if isinstance(
             request_obj,
             SendStreamingMessageRequest,
         ):
-            handler_result = self.request_handler.on_message_send_stream(
-                request_obj
-            )
+            handler_result = self.handler.on_message_send_stream(request_obj)
         elif isinstance(request_obj, TaskResubscriptionRequest):
-            handler_result = self.request_handler.on_resubscribe_to_task(
-                request_obj
-            )
+            handler_result = self.handler.on_resubscribe(request_obj)
 
         return self._create_response(handler_result)
 
@@ -176,42 +167,24 @@ class A2AApplication:
             request_id: The ID of the request.
             a2a_request: The validated A2ARequest object.
         """
-        logger.debug(
-            'Processing the non-streaming request with id %s and type %s',
-            request_id,
-            type(a2a_request.root),
-        )
         request_obj = a2a_request.root
         handler_result: Any = None
         match request_obj:
             case SendMessageRequest():
-                handler_result = await self.request_handler.on_message_send(
-                    request_obj
-                )
+                handler_result = await self.handler.on_message_send(request_obj)
             case CancelTaskRequest():
-                handler_result = await self.request_handler.on_cancel_task(
-                    request_obj
-                )
+                handler_result = await self.handler.on_cancel(request_obj)
             case GetTaskRequest():
-                handler_result = await self.request_handler.on_get_task(
-                    request_obj
-                )
+                handler_result = await self.handler.on_get_task(request_obj)
             case SetTaskPushNotificationConfigRequest():
-                handler_result = (
-                    await self.request_handler.on_set_task_push_notification(
-                        request_obj
-                    )
-                )
+                handler_result = await self.handler.on_set_push_notification(
+                    request_obj)
             case GetTaskPushNotificationConfigRequest():
-                handler_result = (
-                    await self.request_handler.on_get_task_push_notification(
-                        request_obj
-                    )
-                )
+                handler_result = await self.handler.on_get_push_notification(
+                        request_obj)
             case _:
                 logger.error(
-                    f'Unhandled validated request type: {type(request_obj)}',
-                    exc_info=False,
+                    f'Unhandled validated request type: {type(request_obj)}'
                 )
                 error = UnsupportedOperationError(
                     message=f'Request type {type(request_obj).__name__} is unknown.'
@@ -237,27 +210,21 @@ class A2AApplication:
         - Unexpected types by returning an InternalError.
 
         Args:
-            handler_result: The object returned by the A2ARequestHandler method.
+            handler_result: AsyncGenerator of SendStreamingMessageResponse
 
         Returns:
             A Starlette JSONResponse or EventSourceResponse.
         """
         if isinstance(handler_result, AsyncGenerator):
             # Result is a stream of SendStreamingMessageResponse objects
-            logger.debug('Creating EventSourceResponse for streaming data.')
-
             async def event_generator(
-                stream: AsyncGenerator[SendStreamingMessageResponse, None],
+                stream: AsyncGenerator[Event, None],
             ) -> AsyncGenerator[dict[str, str], None]:
                 async for item in stream:
                     yield {'data': item.root.model_dump_json(exclude_none=True)}
 
-                logger.debug('Streaming completed')
-
             return EventSourceResponse(event_generator(handler_result))
-
         if isinstance(handler_result, JSONRPCErrorResponse):
-            logger.debug('Returing error response.')
             return JSONResponse(
                 handler_result.model_dump(
                     mode='json',
@@ -271,7 +238,6 @@ class A2AApplication:
 
     async def _handle_get_agent_card(self, request: Request) -> JSONResponse:
         """Handles GET requests for the agent card."""
-        logger.info(f'Serving the agent card at {request.url.path}')
         return JSONResponse(
             self.agent_card.model_dump(mode='json', exclude_none=True)
         )
@@ -292,8 +258,7 @@ class A2AApplication:
         Returns:
             A configured Starlette application instance.
         """
-        logger.info('Building A2A Application instance')
-        default_routes = [
+        routes = [
             Route(
                 rpc_url,
                 self._handle_requests,
@@ -307,7 +272,9 @@ class A2AApplication:
                 name='agent_card',
             ),
         ]
-        provided_routes = kwargs.pop('routes', [])
-        all_routes = provided_routes + default_routes
+        if 'routes' in kwargs:
+            kwargs['routes'] += routes
+        else:
+            kwargs['routes'] = routes
 
-        return Starlette(routes=all_routes, **kwargs)
+        return Starlette(**kwargs)

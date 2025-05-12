@@ -1,72 +1,59 @@
 from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator
+from a2a.server.events.event_queue import Event
 
 from a2a.types import (
-    CancelTaskRequest,
-    CancelTaskResponse,
-    GetTaskPushNotificationConfigRequest,
-    GetTaskPushNotificationConfigResponse,
-    GetTaskRequest,
-    GetTaskResponse,
-    JSONRPCErrorResponse,
-    SendMessageRequest,
-    SendMessageResponse,
-    SendStreamingMessageRequest,
-    SendStreamingMessageResponse,
-    SetTaskPushNotificationConfigRequest,
-    SetTaskPushNotificationConfigResponse,
-    TaskResubscriptionRequest,
+    Message,
+    MessageSendParams,
+    Task,
+    TaskIdParams,
+    TaskPushNotificationConfig,
+    TaskQueryParams,
     UnsupportedOperationError,
 )
 
 
-class A2ARequestHandler(ABC):
+class RequestHandler(ABC):
     """A2A request handler interface."""
 
     @abstractmethod
-    async def on_get_task(self, request: GetTaskRequest) -> GetTaskResponse:
+    async def on_get_task(self, request: TaskQueryParams) -> Task | None:
         pass
 
     @abstractmethod
     async def on_cancel_task(
-        self, request: CancelTaskRequest
-    ) -> CancelTaskResponse:
+        self, request: TaskIdParams
+    ) -> Task | None:
         pass
 
     @abstractmethod
     async def on_message_send(
-        self, request: SendMessageRequest
-    ) -> SendMessageResponse:
+        self, request: MessageSendParams
+    ) -> Task | Message:
         pass
 
     @abstractmethod
     async def on_message_send_stream(
-        self, request: SendStreamingMessageRequest
-    ) -> AsyncGenerator[SendStreamingMessageResponse, None]:
-        yield SendStreamingMessageResponse(
-            root=JSONRPCErrorResponse(
-                id=request.id, error=UnsupportedOperationError()
-            )
-        )
+        self, request: MessageSendParams
+    ) -> AsyncGenerator[Event, None]:
+        raise UnsupportedOperationError()
+        yield
 
     @abstractmethod
     async def on_set_task_push_notification_config(
-        self, request: SetTaskPushNotificationConfigRequest
-    ) -> SetTaskPushNotificationConfigResponse:
+        self, request: TaskPushNotificationConfig
+    ) -> TaskPushNotificationConfig:
         pass
 
     @abstractmethod
     async def on_get_task_push_notification_config(
-        self, request: GetTaskPushNotificationConfigRequest
-    ) -> GetTaskPushNotificationConfigResponse:
+        self, request: TaskIdParams
+    ) -> TaskPushNotificationConfig:
         pass
 
     @abstractmethod
     async def on_resubscribe_to_task(
-        self, request: TaskResubscriptionRequest
-    ) -> AsyncGenerator[SendStreamingMessageResponse, None]:
-        yield SendStreamingMessageResponse(
-            root=JSONRPCErrorResponse(
-                id=request.id, error=UnsupportedOperationError()
-            )
-        )
+        self, request: TaskIdParams
+    ) -> AsyncGenerator[Event, None]:
+        raise UnsupportedOperationError()
+        yield

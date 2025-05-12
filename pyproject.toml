@@ -3,7 +3,7 @@ name = "a2a"
 version = "0.2.0"
 description = "A2A Python SDK"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.13"
 dependencies = [
     "httpx>=0.28.1",
     "httpx-sse>=0.4.0",
@@ -18,7 +18,7 @@ dependencies = [
 testpaths = ["tests"]
 python_files = "test_*.py"
 python_functions = "test_*"
-addopts = "--cov=src --cov-report term --cov-report xml:coverage.xml --cov-branch"
+addopts = "--cov=src --cov-config=.coveragerc --cov-report term --cov-report xml:coverage.xml --cov-branch"
 
 [build-system]
 requires = ["hatchling"]
@@ -31,6 +31,8 @@ members = ["examples/langgraph", "examples/helloworld"]
 dev = [
     "datamodel-code-generator>=0.30.0",
     "pytest>=8.3.5",
+    "pytest-asyncio>=0.26.0",
     "pytest-cov>=6.1.1",
+    "pytest-mock>=3.14.0",
     "ruff>=0.11.6",
 ]
