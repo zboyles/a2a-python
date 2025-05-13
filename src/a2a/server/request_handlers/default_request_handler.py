@@ -5,13 +5,13 @@ from collections.abc import AsyncGenerator
 
 from a2a.server.agent_execution import AgentExecutor, RequestContext
 from a2a.server.events import (
+    Event,
     EventConsumer,
     EventQueue,
-    Event,
+    InMemoryQueueManager,
+    NoTaskQueue,
     QueueManager,
     TaskQueueExists,
-    NoTaskQueue,
-    InMemoryQueueManager,
 )
 from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.server.tasks import ResultAggregator, TaskManager, TaskStore
@@ -180,7 +180,8 @@ class DefaultRequestHandler(RequestHandler):
                         task_id = event.id
                     except TaskQueueExists:
                         logging.info(
-                            'Multiple Task objects created in event stream.')
+                            'Multiple Task objects created in event stream.'
+                        )
                         yield event
         finally:
             await producer_task
@@ -190,13 +191,13 @@ class DefaultRequestHandler(RequestHandler):
             pass
 
     async def on_set_task_push_notification_config(
-        self, request: TaskPushNotificationConfig
+        self, params: TaskPushNotificationConfig
     ) -> TaskPushNotificationConfig:
         """Default handler for 'tasks/pushNotificationConfig/set'."""
         raise ServerError(error=UnsupportedOperationError())
 
     async def on_get_task_push_notification_config(
-        self, request: TaskIdParams
+        self, params: TaskIdParams
     ) -> TaskPushNotificationConfig:
         """Default handler for 'tasks/pushNotificationConfig/get'."""
         raise ServerError(error=UnsupportedOperationError())
@@ -221,8 +222,8 @@ class DefaultRequestHandler(RequestHandler):
 
         try:
             queue = await self._queue_manager.tap(task.id)
-        except NoTaskQueue:
-            raise ServerError(error=TaskNotFoundError())
+        except NoTaskQueue as e:
+            raise ServerError(error=TaskNotFoundError()) from e
 
         consumer = EventConsumer(queue)
         async for event in result_aggregator.consume_and_emit(consumer):

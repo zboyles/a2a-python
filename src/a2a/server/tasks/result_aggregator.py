@@ -63,5 +63,4 @@ class ResultAggregator:
     #         if isinstance(event, Message):
     #             self._current_task_or_message = event
     #             break
-    #         await self.task_manager.process(event)
-    #     return await self.task_manager.get_task()
+    #         yield await self.task_manager.process(event)
