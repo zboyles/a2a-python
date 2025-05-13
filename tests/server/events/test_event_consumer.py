@@ -1,4 +1,3 @@
-
 import asyncio
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -36,15 +35,16 @@ MESSAGE_PAYLOAD: dict[str, Any] = {
     'messageId': '111',
 }
 
+
 @pytest.fixture
 def mock_event_queue():
     return AsyncMock(spec=EventQueue)
 
+
 @pytest.fixture
-def event_consumer(
-    mock_event_queue: EventQueue
-):
+def event_consumer(mock_event_queue: EventQueue):
     return EventConsumer(queue=mock_event_queue)
+
 
 @pytest.mark.asyncio
 async def test_consume_one_task_event(
@@ -57,6 +57,7 @@ async def test_consume_one_task_event(
     assert result == task_event
     mock_event_queue.task_done.assert_called_once()
 
+
 @pytest.mark.asyncio
 async def test_consume_one_message_event(
     event_consumer: MagicMock,
@@ -67,6 +68,7 @@ async def test_consume_one_message_event(
     result = await event_consumer.consume_one()
     assert result == message_event
     mock_event_queue.task_done.assert_called_once()
+
 
 @pytest.mark.asyncio
 async def test_consume_one_a2a_error_event(
@@ -79,6 +81,7 @@ async def test_consume_one_a2a_error_event(
     assert result == error_event
     mock_event_queue.task_done.assert_called_once()
 
+
 @pytest.mark.asyncio
 async def test_consume_one_jsonrpc_error_event(
     event_consumer: MagicMock,
@@ -89,6 +92,7 @@ async def test_consume_one_jsonrpc_error_event(
     result = await event_consumer.consume_one()
     assert result == error_event
     mock_event_queue.task_done.assert_called_once()
+
 
 @pytest.mark.asyncio
 async def test_consume_one_queue_empty(
@@ -102,6 +106,7 @@ async def test_consume_one_queue_empty(
     except ServerError:
         pass
     mock_event_queue.task_done.assert_not_called()
+
 
 @pytest.mark.asyncio
 async def test_consume_all_multiple_events(
@@ -125,12 +130,14 @@ async def test_consume_all_multiple_events(
         ),
     ]
     cursor = 0
+
     async def mock_dequeue() -> Any:
         nonlocal cursor
         if cursor < len(events):
             event = events[cursor]
             cursor += 1
             return event
+
     mock_event_queue.dequeue_event = mock_dequeue
     consumed_events: list[Any] = []
     async for event in event_consumer.consume_all():
@@ -140,6 +147,7 @@ async def test_consume_all_multiple_events(
     assert consumed_events[1] == events[1]
     assert consumed_events[2] == events[2]
     assert mock_event_queue.task_done.call_count == 3
+
 
 @pytest.mark.asyncio
 async def test_consume_until_message(
@@ -164,12 +172,14 @@ async def test_consume_until_message(
         ),
     ]
     cursor = 0
+
     async def mock_dequeue() -> Any:
         nonlocal cursor
         if cursor < len(events):
             event = events[cursor]
             cursor += 1
             return event
+
     mock_event_queue.dequeue_event = mock_dequeue
     consumed_events: list[Any] = []
     async for event in event_consumer.consume_all():
@@ -179,6 +189,7 @@ async def test_consume_until_message(
     assert consumed_events[1] == events[1]
     assert consumed_events[2] == events[2]
     assert mock_event_queue.task_done.call_count == 3
+
 
 @pytest.mark.asyncio
 async def test_consume_message_events(
@@ -190,12 +201,14 @@ async def test_consume_message_events(
         Message(**MESSAGE_PAYLOAD, final=True),
     ]
     cursor = 0
+
     async def mock_dequeue() -> Any:
         nonlocal cursor
         if cursor < len(events):
             event = events[cursor]
             cursor += 1
             return event
+
     mock_event_queue.dequeue_event = mock_dequeue
     consumed_events: list[Any] = []
     async for event in event_consumer.consume_all():

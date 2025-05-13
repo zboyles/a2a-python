@@ -1,4 +1,3 @@
-
 import asyncio
 import pytest
 from a2a.server.events.event_queue import EventQueue
@@ -17,6 +16,7 @@ from a2a.types import (
     TaskNotFoundError,
 )
 from typing import Any
+
 MINIMAL_TASK: dict[str, Any] = {
     'id': '123',
     'contextId': 'session-xyz',
@@ -28,9 +28,13 @@ MESSAGE_PAYLOAD: dict[str, Any] = {
     'parts': [{'text': 'test message'}],
     'messageId': '111',
 }
+
+
 @pytest.fixture
 def event_queue() -> EventQueue:
     return EventQueue()
+
+
 @pytest.mark.asyncio
 async def test_enqueue_and_dequeue_event(event_queue: EventQueue) -> None:
     """Test that an event can be enqueued and dequeued."""
@@ -38,6 +42,8 @@ async def test_enqueue_and_dequeue_event(event_queue: EventQueue) -> None:
     event_queue.enqueue_event(event)
     dequeued_event = await event_queue.dequeue_event()
     assert dequeued_event == event
+
+
 @pytest.mark.asyncio
 async def test_dequeue_event_no_wait(event_queue: EventQueue) -> None:
     """Test dequeue_event with no_wait=True."""
@@ -45,6 +51,8 @@ async def test_dequeue_event_no_wait(event_queue: EventQueue) -> None:
     event_queue.enqueue_event(event)
     dequeued_event = await event_queue.dequeue_event(no_wait=True)
     assert dequeued_event == event
+
+
 @pytest.mark.asyncio
 async def test_dequeue_event_empty_queue_no_wait(
     event_queue: EventQueue,
@@ -52,6 +60,8 @@ async def test_dequeue_event_empty_queue_no_wait(
     """Test dequeue_event with no_wait=True when the queue is empty."""
     with pytest.raises(asyncio.QueueEmpty):
         await event_queue.dequeue_event(no_wait=True)
+
+
 @pytest.mark.asyncio
 async def test_dequeue_event_wait(event_queue: EventQueue) -> None:
     """Test dequeue_event with the default wait behavior."""
@@ -64,6 +74,8 @@ async def test_dequeue_event_wait(event_queue: EventQueue) -> None:
     event_queue.enqueue_event(event)
     dequeued_event = await event_queue.dequeue_event()
     assert dequeued_event == event
+
+
 @pytest.mark.asyncio
 async def test_task_done(event_queue: EventQueue) -> None:
     """Test the task_done method."""
@@ -75,6 +87,8 @@ async def test_task_done(event_queue: EventQueue) -> None:
     event_queue.enqueue_event(event)
     _ = await event_queue.dequeue_event()
     event_queue.task_done()
+
+
 @pytest.mark.asyncio
 async def test_enqueue_different_event_types(
     event_queue: EventQueue,
@@ -88,4 +102,3 @@ async def test_enqueue_different_event_types(
         event_queue.enqueue_event(event)
         dequeued_event = await event_queue.dequeue_event()
         assert dequeued_event == event
-
