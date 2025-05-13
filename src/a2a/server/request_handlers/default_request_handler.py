@@ -4,7 +4,15 @@ import logging
 from collections.abc import AsyncGenerator
 
 from a2a.server.agent_execution import AgentExecutor, RequestContext
-from a2a.server.events import Event, EventConsumer, EventQueue
+from a2a.server.events import (
+    EventConsumer,
+    EventQueue,
+    Event,
+    QueueManager,
+    TaskQueueExists,
+    NoTaskQueue,
+    InMemoryQueueManager,
+)
 from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.server.tasks import ResultAggregator, TaskManager, TaskStore
 from a2a.types import (
@@ -28,13 +36,14 @@ class DefaultRequestHandler(RequestHandler):
     """Default request handler for all incoming requests."""
 
     def __init__(
-        self, agent_executor: AgentExecutor, task_store: TaskStore
+        self,
+        agent_executor: AgentExecutor,
+        task_store: TaskStore,
+        queue_manager: QueueManager = InMemoryQueueManager(),
     ) -> None:
         self.agent_executor = agent_executor
         self.task_store = task_store
-        # This works for single binary solution. Needs a distributed approach for
-        # true scalable deployment.
-        self._task_queue: dict[str, EventQueue] = {}
+        self._queue_manager = queue_manager
 
     async def on_get_task(self, params: TaskQueryParams) -> Task | None:
         """Default handler for 'tasks/get'."""
@@ -56,8 +65,10 @@ class DefaultRequestHandler(RequestHandler):
             initial_message=None,
         )
         result_aggregator = ResultAggregator(task_manager)
-
-        queue = EventQueue()
+        try:
+            queue = await self._queue_manager.tap(task.id)
+        except:
+            queue = EventQueue()
         await self.agent_executor.cancel(
             RequestContext(
                 None,
@@ -95,15 +106,11 @@ class DefaultRequestHandler(RequestHandler):
         task: Task | None = await task_manager.get_task()
         if task:
             task = task_manager.update_with_message(params.message, task)
+            queue = await self._queue_manager.create_or_tap(task.id)
+        else:
+            queue = EventQueue()
         result_aggregator = ResultAggregator(task_manager)
         # TODO to manage the non-blocking flows.
-
-        queue = EventQueue()
-        # If this is a follow up on an existing task, register the queue now
-        task_id: str | None = task.id if task else None
-        if task_id:
-            self._task_queue[task_id] = queue
-
         producer_task = asyncio.create_task(
             self._run_event_stream(
                 RequestContext(
@@ -127,6 +134,11 @@ class DefaultRequestHandler(RequestHandler):
             return result
         finally:
             await producer_task
+        if task:
+            try:
+                await self._queue_manager.close(task.id)
+            except NoTaskQueue:
+                pass
 
     async def on_message_send_stream(
         self, params: MessageSendParams
@@ -142,14 +154,11 @@ class DefaultRequestHandler(RequestHandler):
 
         if task:
             task = task_manager.update_with_message(params.message, task)
-
+            queue = await self._queue_manager.create_or_tap(task.id)
+        else:
+            queue = EventQueue()
         result_aggregator = ResultAggregator(task_manager)
-        queue = EventQueue()
-
         task_id: str | None = task.id if task else None
-        if task_id:
-            self._task_queue[task_id] = queue
-
         producer_task = asyncio.create_task(
             self._run_event_stream(
                 RequestContext(
@@ -165,13 +174,20 @@ class DefaultRequestHandler(RequestHandler):
             consumer = EventConsumer(queue)
             async for event in result_aggregator.consume_and_emit(consumer):
                 # Now we know we have a Task, register the queue
-                if isinstance(event, Task) and event.id not in self._task_queue:
-                    self._task_queue[event.id] = queue
-                    task_id = event.id
-                yield event
-
+                if isinstance(event, Task):
+                    try:
+                        await self._queue_manager.add(event.id, queue)
+                        task_id = event.id
+                    except TaskQueueExists:
+                        logging.info(
+                            'Multiple Task objects created in event stream.')
+                        yield event
         finally:
             await producer_task
+        try:
+            await self._queue_manager.close(task_id)
+        except NoTaskQueue:
+            pass
 
     async def on_set_task_push_notification_config(
         self, request: TaskPushNotificationConfig
@@ -203,12 +219,11 @@ class DefaultRequestHandler(RequestHandler):
 
         result_aggregator = ResultAggregator(task_manager)
 
-        # Need to tap the existing queue.
-        if not task.id in self._task_queue:
+        try:
+            queue = await self._queue_manager.tap(task.id)
+        except NoTaskQueue:
             raise ServerError(error=TaskNotFoundError())
-            return
 
-        queue = self._task_queue[task.id].tap()
         consumer = EventConsumer(queue)
         async for event in result_aggregator.consume_and_emit(consumer):
             yield event
