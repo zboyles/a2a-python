@@ -1,27 +1,24 @@
 import asyncio
-import functools
 import logging
-import threading
 
 from collections.abc import AsyncGenerator
 
-from a2a.server.agent_execution import AgentExecutor
-from a2a.server.events import EventConsumer, EventQueue, Event
+from a2a.server.agent_execution import AgentExecutor, RequestContext
+from a2a.server.events import Event, EventConsumer, EventQueue
 from a2a.server.request_handlers.request_handler import RequestHandler
-from a2a.server.tasks import TaskManager, TaskStore, ResultAggregator
-from a2a.server.agent_execution import RequestContext
-from a2a.utils.errors import ServerError
-
+from a2a.server.tasks import ResultAggregator, TaskManager, TaskStore
 from a2a.types import (
+    InternalError,
     Message,
     MessageSendParams,
     Task,
     TaskIdParams,
+    TaskNotFoundError,
     TaskPushNotificationConfig,
     TaskQueryParams,
     UnsupportedOperationError,
-    TaskNotFoundError
 )
+from a2a.utils.errors import ServerError
 
 
 logger = logging.getLogger(__name__)
@@ -68,19 +65,27 @@ class DefaultRequestHandler(RequestHandler):
                 context_id=task.contextId,
                 task=task,
             ),
-            queue
+            queue,
         )
         consumer = EventConsumer(queue)
-        return await result_aggregator.consume_all(consumer)
+        result = await result_aggregator.consume_all(consumer)
+        if isinstance(result, Task):
+            return result
 
-    async def _run_event_stream(self, request: RequestContext, queue: EventQueue):
+        raise ServerError(
+            error=InternalError(message='Agent did not result valid response')
+        )
+
+    async def _run_event_stream(
+        self, request: RequestContext, queue: EventQueue
+    ) -> None:
         await self.agent_executor.execute(request, queue)
         queue.close()
 
     async def on_message_send(
         self, params: MessageSendParams
     ) -> Message | Task:
-        """Default handler for 'message/send' interface"""
+        """Default handler for 'message/send' interface."""
         task_manager = TaskManager(
             task_id=params.message.taskId,
             context_id=params.message.contextId,
@@ -92,32 +97,36 @@ class DefaultRequestHandler(RequestHandler):
             task = task_manager.update_with_message(params.message, task)
         result_aggregator = ResultAggregator(task_manager)
         # TODO to manage the non-blocking flows.
-        queue = EventQueue()
-        def _run_agent_stream() -> None:
-            asyncio.run(
-                self._run_event_stream(
-                    RequestContext(
-                        params,
-                        task.id if task else None,
-                        task.contextId if task else None,
-                        task,
-                    ),
-                    queue,
-                )
-            )
 
+        queue = EventQueue()
         # If this is a follow up on an existing task, register the queue now
         task_id: str | None = task.id if task else None
-        if task:
+        if task_id:
             self._task_queue[task_id] = queue
 
-        thread = threading.Thread(target=_run_agent_stream)
-        thread.start()
-        consumer = EventConsumer(queue)
-        # TODO - register the queue for the task upon the first sign it is a task.
-        thread.join()
-        return await result_aggregator.consume_all(consumer)
+        producer_task = asyncio.create_task(
+            self._run_event_stream(
+                RequestContext(
+                    params,
+                    task.id if task else None,
+                    task.contextId if task else None,
+                    task,
+                ),
+                queue,
+            )
+        )
 
+        try:
+            consumer = EventConsumer(queue)
+
+            # TODO - register the queue for the task upon the first sign it is a task.
+            result = await result_aggregator.consume_all(consumer)
+            if not result:
+                raise ServerError(error=InternalError())
+
+            return result
+        finally:
+            await producer_task
 
     async def on_message_send_stream(
         self, params: MessageSendParams
@@ -136,51 +145,45 @@ class DefaultRequestHandler(RequestHandler):
 
         result_aggregator = ResultAggregator(task_manager)
         queue = EventQueue()
-        def _run_agent_stream() -> None:
-            asyncio.run(
-                self._run_event_stream(
-                    RequestContext(
-                        params,
-                        task.id if task else None,
-                        task.contextId if task else None,
-                        task,
-                    ),
-                    queue,
-                )
-            )
 
-        # If this is a follow up on an existing task, register the queue now
         task_id: str | None = task.id if task else None
-        if task:
+        if task_id:
             self._task_queue[task_id] = queue
 
-        thread = threading.Thread(target=_run_agent_stream)
-        thread.start()
+        producer_task = asyncio.create_task(
+            self._run_event_stream(
+                RequestContext(
+                    params,
+                    task.id if task else None,
+                    task.contextId if task else None,
+                    task,
+                ),
+                queue,
+            )
+        )
+        try:
+            consumer = EventConsumer(queue)
+            async for event in result_aggregator.consume_and_emit(consumer):
+                # Now we know we have a Task, register the queue
+                if isinstance(event, Task) and event.id not in self._task_queue:
+                    self._task_queue[event.id] = queue
+                    task_id = event.id
+                yield event
 
-        consumer = EventConsumer(queue)
-        async for event in result_aggregator.consume_and_emit(consumer):
-            # Now we know we have a Task, register the queue
-            if isinstance(event, Task) and event.id not in self._task_queue:
-                self._task_queue[event.id] = queue
-                task_id = event.id
-            yield event
-
-        thread.join()
-        # Now clean up task queue registration
-        if task_id in self._task_queue:
-            del self._task_queue[task_id]
+        finally:
+            await producer_task
 
     async def on_set_task_push_notification_config(
         self, request: TaskPushNotificationConfig
     ) -> TaskPushNotificationConfig:
         """Default handler for 'tasks/pushNotificationConfig/set'."""
-        raise UnsupportedOperationError()
+        raise ServerError(error=UnsupportedOperationError())
 
     async def on_get_task_push_notification_config(
         self, request: TaskIdParams
     ) -> TaskPushNotificationConfig:
         """Default handler for 'tasks/pushNotificationConfig/get'."""
-        raise UnsupportedOperationError()
+        raise ServerError(error=UnsupportedOperationError())
 
     async def on_resubscribe_to_task(
         self, params: TaskIdParams

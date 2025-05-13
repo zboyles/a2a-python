@@ -22,7 +22,8 @@ class TaskManager:
     """Helps manage a task's lifecycle during execution of a request."""
 
     def __init__(
-        self, task_id: str | None,
+        self,
+        task_id: str | None,
         context_id: str | None,
         task_store: TaskStore,
         initial_message: Message | None,
@@ -31,7 +32,7 @@ class TaskManager:
         self.context_id = context_id
         self.task_store = task_store
         self._initial_message = initial_message
-        self._current_task = None
+        self._current_task: Task | None = None
         logger.debug(
             'TaskManager initialized with task_id: %s, context_id: %s',
             task_id,
@@ -46,7 +47,9 @@ class TaskManager:
         if self._current_task:
             return self._current_task
 
-        logger.debug('Attempting to get task from store with id: %s', self.task_id)
+        logger.debug(
+            'Attempting to get task from store with id: %s', self.task_id
+        )
         self._current_task = await self.task_store.get(self.task_id)
         if self._current_task:
             logger.debug('Task %s retrieved successfully.', self.task_id)
@@ -64,7 +67,9 @@ class TaskManager:
         if self.task_id and self.task_id != task_id_from_event:
             raise ServerError(
                 error=InvalidParamsError(
-                    message=f'Task in event doesn\'t match TaskManager {self.task_id} : {task_id_from_event}'))
+                    message=f"Task in event doesn't match TaskManager {self.task_id} : {task_id_from_event}"
+                )
+            )
         elif not self.task_id:
             self.task_id = task_id_from_event
         if not self.context_id and self.context_id != event.contextId:
@@ -86,7 +91,11 @@ class TaskManager:
                 'Updating task %s status to: %s', task.id, event.status.state
             )
             if task.status.message:
-                task.history.append(task.status.message)
+                if not task.history:
+                    task.history = [task.status.message]
+                else:
+                    task.history.append(task.status.message)
+
             task.status = event.status
         else:
             logger.debug('Appending artifact to task %s', task.id)
@@ -125,7 +134,7 @@ class TaskManager:
         """
         if isinstance(event, Message):
             return Message
-        await self.save_task_event(event)
+        return await self.save_task_event(event)
 
     def _init_task_obj(self, task_id: str, context_id: str) -> Task:
         """Initializes a new task object."""

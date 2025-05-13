@@ -12,9 +12,10 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from a2a.utils.errors import MethodNotImplementedError
-from a2a.server.request_handlers.jsonrpc_handler import RequestHandler, JSONRPCHandler
-from a2a.server.events.event_queue import Event
+from a2a.server.request_handlers.jsonrpc_handler import (
+    JSONRPCHandler,
+    RequestHandler,
+)
 from a2a.types import (
     A2AError,
     A2ARequest,
@@ -35,6 +36,7 @@ from a2a.types import (
     TaskResubscriptionRequest,
     UnsupportedOperationError,
 )
+from a2a.utils.errors import MethodNotImplementedError
 
 
 logger = logging.getLogger(__name__)
@@ -47,9 +49,7 @@ class A2AStarletteApplication:
     handler methods, and manages response generation including Server-Sent Events (SSE).
     """
 
-    def __init__(
-        self, agent_card: AgentCard, http_handler: RequestHandler
-    ):
+    def __init__(self, agent_card: AgentCard, http_handler: RequestHandler):
         """Initializes the A2AApplication.
 
         Args:
@@ -57,7 +57,9 @@ class A2AStarletteApplication:
             http_handler: The handler instance responsible for processing A2A requests via http.
         """
         self.agent_card = agent_card
-        self.handler = JSONRPCHandler(agent_card=agent_card, request_handler=http_handler)
+        self.handler = JSONRPCHandler(
+            agent_card=agent_card, request_handler=http_handler
+        )
 
     def _generate_error_response(
         self, request_id: str | int | None, error: JSONRPCError | A2AError
@@ -154,7 +156,7 @@ class A2AStarletteApplication:
         ):
             handler_result = self.handler.on_message_send_stream(request_obj)
         elif isinstance(request_obj, TaskResubscriptionRequest):
-            handler_result = self.handler.on_resubscribe(request_obj)
+            handler_result = self.handler.on_resubscribe_to_task(request_obj)
 
         return self._create_response(handler_result)
 
@@ -173,15 +175,17 @@ class A2AStarletteApplication:
             case SendMessageRequest():
                 handler_result = await self.handler.on_message_send(request_obj)
             case CancelTaskRequest():
-                handler_result = await self.handler.on_cancel(request_obj)
+                handler_result = await self.handler.on_cancel_task(request_obj)
             case GetTaskRequest():
                 handler_result = await self.handler.on_get_task(request_obj)
             case SetTaskPushNotificationConfigRequest():
-                handler_result = await self.handler.on_set_push_notification(
-                    request_obj)
+                handler_result = await self.handler.set_push_notification(
+                    request_obj
+                )
             case GetTaskPushNotificationConfigRequest():
-                handler_result = await self.handler.on_get_push_notification(
-                        request_obj)
+                handler_result = await self.handler.get_push_notification(
+                    request_obj
+                )
             case _:
                 logger.error(
                     f'Unhandled validated request type: {type(request_obj)}'
@@ -218,7 +222,7 @@ class A2AStarletteApplication:
         if isinstance(handler_result, AsyncGenerator):
             # Result is a stream of SendStreamingMessageResponse objects
             async def event_generator(
-                stream: AsyncGenerator[Event, None],
+                stream: AsyncGenerator[SendStreamingMessageResponse, None],
             ) -> AsyncGenerator[dict[str, str], None]:
                 async for item in stream:
                     yield {'data': item.root.model_dump_json(exclude_none=True)}

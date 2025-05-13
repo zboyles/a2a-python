@@ -1,7 +1,7 @@
 import asyncio
 import logging
+
 from typing import Any
-from pydantic import RootModel
 
 from a2a.types import (
     A2AError,

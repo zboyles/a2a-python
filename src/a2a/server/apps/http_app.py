@@ -1,8 +1,12 @@
 from abc import ABC, abstractmethod
+from typing import Any
+
 from starlette.applications import Starlette
 
-class HttpApp(ABC):
 
-  @abstractmethod
-  def build(self, **kwargs) -> Starlette:
-    pass
+class HttpApp(ABC):
+    """A2A Server application interface."""
+
+    @abstractmethod
+    def build(self, **kwargs: Any) -> Starlette:
+        pass

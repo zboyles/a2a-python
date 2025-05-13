@@ -2,17 +2,12 @@ import logging
 
 from collections.abc import AsyncGenerator
 
+from a2a.server.events import Event, EventConsumer
 from a2a.server.tasks.task_manager import TaskManager
-from a2a.server.events import EventConsumer, Event
 from a2a.types import (
     Message,
     Task,
-    TaskArtifactUpdateEvent,
-    TaskState,
-    TaskStatus,
-    TaskStatusUpdateEvent,
 )
-from a2a.utils import append_artifact_to_task
 
 
 logger = logging.getLogger(__name__)
@@ -41,7 +36,9 @@ class ResultAggregator:
             return self._message
         return self.task_manager.get_task()
 
-    async def consume_and_emit(self, consumer: EventConsumer) -> AsyncGenerator[Event, None]:
+    async def consume_and_emit(
+        self, consumer: EventConsumer
+    ) -> AsyncGenerator[Event, None]:
         """Processes the event stream and emits the same event stream out."""
         async for event in consumer.consume_all():
             if isinstance(event, Message):
@@ -50,7 +47,9 @@ class ResultAggregator:
             await self.task_manager.process(event)
             yield event
 
-    async def consume_all(self, consumer: EventConsumer) -> Event:
+    async def consume_all(
+        self, consumer: EventConsumer
+    ) -> Task | Message | None:
         """Processes the entire event stream and returns the final result."""
         async for event in consumer.consume_all():
             if isinstance(event, Message):
@@ -62,7 +61,7 @@ class ResultAggregator:
     async def consume_and_emit_task(
         self, consumer: EventConsumer
     ) -> AsyncGenerator[Event, None]:
-        """Processes the event stream and emits the current state of the task"""
+        """Processes the event stream and emits the current state of the task."""
         async for event in consumer.consume_all():
             if isinstance(event, Message):
                 self._current_task_or_message = event

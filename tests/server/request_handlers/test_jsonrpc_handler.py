@@ -1,4 +1,3 @@
-
 import unittest
 from unittest.mock import AsyncMock, patch
 import pytest
@@ -40,6 +39,8 @@ from a2a.types import (
 )
 from collections.abc import AsyncGenerator
 from typing import Any
+import asyncio
+
 MINIMAL_TASK: dict[str, Any] = {
     'id': 'task_123',
     'contextId': 'session-xyz',
@@ -52,15 +53,19 @@ MESSAGE_PAYLOAD: dict[str, Any] = {
     'messageId': '111',
 }
 
+
 @pytest.fixture
 def mock_event_queue():
     return AsyncMock(spec=EventQueue)
+
 
 class TestJSONRPCtHandler(unittest.IsolatedAsyncioTestCase):
     async def test_on_get_task_success(self) -> None:
         mock_agent_executor = AsyncMock(spec=AgentExecutor)
         mock_task_store = AsyncMock(spec=TaskStore)
-        request_handler = DefaultRequestHandler(mock_agent_executor, mock_task_store)
+        request_handler = DefaultRequestHandler(
+            mock_agent_executor, mock_task_store
+        )
         handler = JSONRPCHandler(None, request_handler)
         task_id = 'test_task_id'
         mock_task = Task(**MINIMAL_TASK)
@@ -74,7 +79,9 @@ class TestJSONRPCtHandler(unittest.IsolatedAsyncioTestCase):
     async def test_on_get_task_not_found(self) -> None:
         mock_agent_executor = AsyncMock(spec=AgentExecutor)
         mock_task_store = AsyncMock(spec=TaskStore)
-        request_handler = DefaultRequestHandler(mock_agent_executor, mock_task_store)
+        request_handler = DefaultRequestHandler(
+            mock_agent_executor, mock_task_store
+        )
         handler = JSONRPCHandler(None, request_handler)
         mock_task_store.get.return_value = None
         request = GetTaskRequest(
@@ -89,14 +96,18 @@ class TestJSONRPCtHandler(unittest.IsolatedAsyncioTestCase):
     async def test_on_cancel_task_success(self) -> None:
         mock_agent_executor = AsyncMock(spec=AgentExecutor)
         mock_task_store = AsyncMock(spec=TaskStore)
-        request_handler = DefaultRequestHandler(mock_agent_executor, mock_task_store)
+        request_handler = DefaultRequestHandler(
+            mock_agent_executor, mock_task_store
+        )
         handler = JSONRPCHandler(None, request_handler)
         task_id = 'test_task_id'
         mock_task = Task(**MINIMAL_TASK)
         mock_task_store.get.return_value = mock_task
         mock_agent_executor.cancel.return_value = None
+
         async def streaming_coro():
             yield mock_task
+
         with patch(
             'a2a.server.request_handlers.default_request_handler.EventConsumer.consume_all',
             return_value=streaming_coro(),
@@ -111,15 +122,19 @@ class TestJSONRPCtHandler(unittest.IsolatedAsyncioTestCase):
     async def test_on_cancel_task_not_supported(self) -> None:
         mock_agent_executor = AsyncMock(spec=AgentExecutor)
         mock_task_store = AsyncMock(spec=TaskStore)
-        request_handler = DefaultRequestHandler(mock_agent_executor, mock_task_store)
+        request_handler = DefaultRequestHandler(
+            mock_agent_executor, mock_task_store
+        )
         handler = JSONRPCHandler(None, request_handler)
         task_id = 'test_task_id'
         mock_task = Task(**MINIMAL_TASK)
         mock_task_store.get.return_value = mock_task
         mock_agent_executor.cancel.return_value = None
+
         async def streaming_coro():
             raise ServerError(UnsupportedOperationError())
             yield
+
         with patch(
             'a2a.server.request_handlers.default_request_handler.EventConsumer.consume_all',
             return_value=streaming_coro(),
@@ -134,7 +149,9 @@ class TestJSONRPCtHandler(unittest.IsolatedAsyncioTestCase):
     async def test_on_cancel_task_not_found(self) -> None:
         mock_agent_executor = AsyncMock(spec=AgentExecutor)
         mock_task_store = AsyncMock(spec=TaskStore)
-        request_handler = DefaultRequestHandler(mock_agent_executor, mock_task_store)
+        request_handler = DefaultRequestHandler(
+            mock_agent_executor, mock_task_store
+        )
         handler = JSONRPCHandler(None, request_handler)
         mock_task_store.get.return_value = None
         request = CancelTaskRequest(
@@ -151,13 +168,17 @@ class TestJSONRPCtHandler(unittest.IsolatedAsyncioTestCase):
     async def test_on_message_new_message_success(self) -> None:
         mock_agent_executor = AsyncMock(spec=AgentExecutor)
         mock_task_store = AsyncMock(spec=TaskStore)
-        request_handler = DefaultRequestHandler(mock_agent_executor, mock_task_store)
+        request_handler = DefaultRequestHandler(
+            mock_agent_executor, mock_task_store
+        )
         handler = JSONRPCHandler(None, request_handler)
         mock_task = Task(**MINIMAL_TASK)
         mock_task_store.get.return_value = mock_task
         mock_agent_executor.execute.return_value = None
+
         async def streaming_coro():
             yield mock_task
+
         with patch(
             'a2a.server.request_handlers.default_request_handler.EventConsumer.consume_all',
             return_value=streaming_coro(),
@@ -177,13 +198,17 @@ class TestJSONRPCtHandler(unittest.IsolatedAsyncioTestCase):
     ) -> None:
         mock_agent_executor = AsyncMock(spec=AgentExecutor)
         mock_task_store = AsyncMock(spec=TaskStore)
-        request_handler = DefaultRequestHandler(mock_agent_executor, mock_task_store)
+        request_handler = DefaultRequestHandler(
+            mock_agent_executor, mock_task_store
+        )
         handler = JSONRPCHandler(None, request_handler)
         mock_task = Task(**MINIMAL_TASK)
         mock_task_store.get.return_value = mock_task
         mock_agent_executor.execute.return_value = None
+
         async def streaming_coro():
             yield mock_task
+
         with patch(
             'a2a.server.request_handlers.default_request_handler.EventConsumer.consume_all',
             return_value=streaming_coro(),
@@ -209,13 +234,17 @@ class TestJSONRPCtHandler(unittest.IsolatedAsyncioTestCase):
     ) -> None:
         mock_agent_executor = AsyncMock(spec=AgentExecutor)
         mock_task_store = AsyncMock(spec=TaskStore)
-        request_handler = DefaultRequestHandler(mock_agent_executor, mock_task_store)
+        request_handler = DefaultRequestHandler(
+            mock_agent_executor, mock_task_store
+        )
         handler = JSONRPCHandler(None, request_handler)
         mock_task_store.get.return_value = None
         mock_agent_executor.execute.return_value = None
+
         async def streaming_coro():
             raise ServerError(error=UnsupportedOperationError())
             yield
+
         with patch(
             'a2a.server.request_handlers.default_request_handler.EventConsumer.consume_all',
             return_value=streaming_coro(),
@@ -229,6 +258,7 @@ class TestJSONRPCtHandler(unittest.IsolatedAsyncioTestCase):
                 ),
             )
             response = await handler.on_message_send(request)
+
             self.assertIsInstance(response.root, JSONRPCErrorResponse)
             assert response.root.error == UnsupportedOperationError()  # type: ignore
             mock_agent_executor.execute.assert_called_once()
@@ -236,7 +266,9 @@ class TestJSONRPCtHandler(unittest.IsolatedAsyncioTestCase):
     async def test_on_message_stream_new_message_success(self) -> None:
         mock_agent_executor = AsyncMock(spec=AgentExecutor)
         mock_task_store = AsyncMock(spec=TaskStore)
-        request_handler = DefaultRequestHandler(mock_agent_executor, mock_task_store)
+        request_handler = DefaultRequestHandler(
+            mock_agent_executor, mock_task_store
+        )
         handler = JSONRPCHandler(None, request_handler)
         events: list[Any] = [
             Task(**MINIMAL_TASK),
@@ -254,9 +286,11 @@ class TestJSONRPCtHandler(unittest.IsolatedAsyncioTestCase):
                 final=True,
             ),
         ]
+
         async def streaming_coro():
             for event in events:
                 yield event
+
         with patch(
             'a2a.server.request_handlers.default_request_handler.EventConsumer.consume_all',
             return_value=streaming_coro(),
@@ -285,7 +319,9 @@ class TestJSONRPCtHandler(unittest.IsolatedAsyncioTestCase):
     ) -> None:
         mock_agent_executor = AsyncMock(spec=AgentExecutor)
         mock_task_store = AsyncMock(spec=TaskStore)
-        request_handler = DefaultRequestHandler(mock_agent_executor, mock_task_store)
+        request_handler = DefaultRequestHandler(
+            mock_agent_executor, mock_task_store
+        )
         handler = JSONRPCHandler(None, request_handler)
         mock_task = Task(**MINIMAL_TASK, history=[])
         events: list[Any] = [
@@ -304,9 +340,11 @@ class TestJSONRPCtHandler(unittest.IsolatedAsyncioTestCase):
                 final=True,
             ),
         ]
+
         async def streaming_coro():
             for event in events:
                 yield event
+
         with patch(
             'a2a.server.request_handlers.default_request_handler.EventConsumer.consume_all',
             return_value=streaming_coro(),
@@ -338,7 +376,9 @@ class TestJSONRPCtHandler(unittest.IsolatedAsyncioTestCase):
         mock_agent_executor = AsyncMock(spec=AgentExecutor)
         mock_task_store = AsyncMock(spec=TaskStore)
         mock_queue = AsyncMock(spec=EventQueue)
-        request_handler = DefaultRequestHandler(mock_agent_executor, mock_task_store)
+        request_handler = DefaultRequestHandler(
+            mock_agent_executor, mock_task_store
+        )
         handler = JSONRPCHandler(None, request_handler)
         mock_task = Task(**MINIMAL_TASK, history=[])
         request_handler._task_queue[mock_task.id] = mock_queue
@@ -357,9 +397,11 @@ class TestJSONRPCtHandler(unittest.IsolatedAsyncioTestCase):
                 final=True,
             ),
         ]
+
         async def streaming_coro():
             for event in events:
                 yield event
+
         with patch(
             'a2a.server.request_handlers.default_request_handler.EventConsumer.consume_all',
             return_value=streaming_coro(),
@@ -382,7 +424,9 @@ class TestJSONRPCtHandler(unittest.IsolatedAsyncioTestCase):
     ) -> None:
         mock_agent_executor = AsyncMock(spec=AgentExecutor)
         mock_task_store = AsyncMock(spec=TaskStore)
-        request_handler = DefaultRequestHandler(mock_agent_executor, mock_task_store)
+        request_handler = DefaultRequestHandler(
+            mock_agent_executor, mock_task_store
+        )
         handler = JSONRPCHandler(None, request_handler)
         mock_task_store.get.return_value = None
         request = TaskResubscriptionRequest(

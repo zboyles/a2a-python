@@ -2,18 +2,16 @@ import asyncio
 import logging
 
 from collections.abc import AsyncGenerator
-from a2a.utils.errors import ServerError
+
 from a2a.server.events.event_queue import Event, EventQueue
 from a2a.types import (
-    A2AError,
     InternalError,
-    JSONRPCError,
     Message,
     Task,
-    TaskArtifactUpdateEvent,
-    TaskStatusUpdateEvent,
     TaskState,
+    TaskStatusUpdateEvent,
 )
+from a2a.utils.errors import ServerError
 
 
 logger = logging.getLogger(__name__)
@@ -35,12 +33,13 @@ class EventConsumer:
             logger.warning('Event queue was empty in consume_one.')
             raise ServerError(
                 InternalError(message='Agent did not return any response')
-            )
+            ) from None
+
+        logger.debug(f'Dequeued event of type: {type(event)} in consume_one.')
 
         self.queue.task_done()
 
         return event
-
 
     async def consume_all(self) -> AsyncGenerator[Event]:
         """Consume all the generated streaming events from the agent."""
@@ -53,17 +52,22 @@ class EventConsumer:
                 )
                 yield event
                 self.queue.task_done()
-                logger.debug('Marked task as done in event queue in consume_all')
-
+                logger.debug(
+                    'Marked task as done in event queue in consume_all'
+                )
 
                 is_final_event = (
-                    (isinstance(event, TaskStatusUpdateEvent) and event.final) or
-                    isinstance(event, Message) or
-                    (isinstance(event, Task) and
-                     event.status.state in (
-                         TaskState.completed, TaskState.canceled, TaskState.failed
-                     )
-                     )
+                    (isinstance(event, TaskStatusUpdateEvent) and event.final)
+                    or isinstance(event, Message)
+                    or (
+                        isinstance(event, Task)
+                        and event.status.state
+                        in (
+                            TaskState.completed,
+                            TaskState.canceled,
+                            TaskState.failed,
+                        )
+                    )
                 )
 
                 if is_final_event:

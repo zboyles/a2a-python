@@ -21,6 +21,7 @@ from a2a.types import (
     SetTaskPushNotificationConfigSuccessResponse,
     Task,
     TaskArtifactUpdateEvent,
+    TaskPushNotificationConfig,
     TaskStatusUpdateEvent,
 )
 
@@ -52,6 +53,7 @@ EventTypes = (
     | Message
     | TaskArtifactUpdateEvent
     | TaskStatusUpdateEvent
+    | TaskPushNotificationConfig
     | A2AError
     | JSONRPCError
 )

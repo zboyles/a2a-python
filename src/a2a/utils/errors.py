@@ -1,16 +1,18 @@
 from a2a.types import (
-    JSONParseError,
-    InvalidRequestError,
-    MethodNotFoundError,
-    InvalidParamsError,
-    InternalError,
-    TaskNotFoundError,
-    TaskNotCancelableError,
-    PushNotificationNotSupportedError,
-    UnsupportedOperationError,
     ContentTypeNotSupportedError,
+    InternalError,
     InvalidAgentResponseError,
+    InvalidParamsError,
+    InvalidRequestError,
+    JSONParseError,
+    JSONRPCError,
+    MethodNotFoundError,
+    PushNotificationNotSupportedError,
+    TaskNotCancelableError,
+    TaskNotFoundError,
+    UnsupportedOperationError,
 )
+
 
 class A2AServerError(Exception):
     """Base exception for  A2A Server errors."""
@@ -25,20 +27,24 @@ class MethodNotImplementedError(A2AServerError):
         self.message = message
         super().__init__(f'Not Implemented operation Error: {message}')
 
-class ServerError(Exception):
 
-    def __init__(self, error: (
-        JSONParseError
-        | InvalidRequestError
-        | MethodNotFoundError
-        | InvalidParamsError
-        | InternalError
-        | TaskNotFoundError
-        | TaskNotCancelableError
-        | PushNotificationNotSupportedError
-        | UnsupportedOperationError
-        | ContentTypeNotSupportedError
-        | InvalidAgentResponseError
-        | None
-    )):
+class ServerError(Exception):
+    def __init__(
+        self,
+        error: (
+            JSONRPCError
+            | JSONParseError
+            | InvalidRequestError
+            | MethodNotFoundError
+            | InvalidParamsError
+            | InternalError
+            | TaskNotFoundError
+            | TaskNotCancelableError
+            | PushNotificationNotSupportedError
+            | UnsupportedOperationError
+            | ContentTypeNotSupportedError
+            | InvalidAgentResponseError
+            | None
+        ),
+    ):
         self.error = error

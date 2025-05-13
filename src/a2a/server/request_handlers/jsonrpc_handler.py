@@ -1,18 +1,12 @@
-import json
 import logging
-from collections.abc import AsyncGenerator, AsyncIterable
-from typing import Any
 
-from .request_handler import RequestHandler
+from collections.abc import AsyncIterable
 
+from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.server.request_handlers.response_helpers import (
-    build_error_response,
     prepare_response_object,
 )
-from a2a.utils.errors import MethodNotImplementedError, ServerError
 from a2a.types import (
-    A2AError,
-    A2ARequest,
     AgentCard,
     CancelTaskRequest,
     CancelTaskResponse,
@@ -24,11 +18,7 @@ from a2a.types import (
     GetTaskResponse,
     GetTaskSuccessResponse,
     InternalError,
-    InvalidRequestError,
-    JSONParseError,
-    JSONRPCError,
     JSONRPCErrorResponse,
-    JSONRPCResponse,
     Message,
     SendMessageRequest,
     SendMessageResponse,
@@ -41,10 +31,12 @@ from a2a.types import (
     SetTaskPushNotificationConfigSuccessResponse,
     Task,
     TaskArtifactUpdateEvent,
-    TaskStatusUpdateEvent,
+    TaskNotFoundError,
+    TaskPushNotificationConfig,
     TaskResubscriptionRequest,
-    UnsupportedOperationError,
+    TaskStatusUpdateEvent,
 )
+from a2a.utils.errors import ServerError
 
 
 logger = logging.getLogger(__name__)
@@ -54,7 +46,8 @@ class JSONRPCHandler:
     """A handler that maps the JSONRPC Objects to the request handler and back."""
 
     def __init__(
-        self, agent_card: AgentCard,
+        self,
+        agent_card: AgentCard,
         request_handler: RequestHandler,
     ):
         """Initializes the HttpProducer.
@@ -85,7 +78,7 @@ class JSONRPCHandler:
         except ServerError as e:
             return SendMessageResponse(
                 root=JSONRPCErrorResponse(
-                    id=request.id, error=e.error
+                    id=request.id, error=e.error if e.error else InternalError()
                 )
             )
 
@@ -94,25 +87,32 @@ class JSONRPCHandler:
         self, request: SendStreamingMessageRequest
     ) -> AsyncIterable[SendStreamingMessageResponse]:
         try:
-          async for event in self.request_handler.on_message_send_stream(request.params):
-              yield prepare_response_object(
-                request.id,
-                event,
-                (Task, Message, TaskArtifactUpdateEvent, TaskStatusUpdateEvent),
-                SendStreamingMessageSuccessResponse,
-                SendStreamingMessageResponse,
-            )
+            async for event in self.request_handler.on_message_send_stream(
+                request.params
+            ):
+                yield prepare_response_object(
+                    request.id,
+                    event,
+                    (
+                        Task,
+                        Message,
+                        TaskArtifactUpdateEvent,
+                        TaskStatusUpdateEvent,
+                    ),
+                    SendStreamingMessageSuccessResponse,
+                    SendStreamingMessageResponse,
+                )
         except ServerError as e:
             yield SendStreamingMessageResponse(
                 root=JSONRPCErrorResponse(
-                    id=request.id, error=e.error
+                    id=request.id, error=e.error if e.error else InternalError()
                 )
             )
 
     # tasks/cancel
     async def on_cancel_task(
         self, request: CancelTaskRequest
-    ) -> CancelTaskResponse | None:
+    ) -> CancelTaskResponse:
         try:
             task = await self.request_handler.on_cancel_task(request.params)
             if task:
@@ -123,30 +123,38 @@ class JSONRPCHandler:
                     CancelTaskSuccessResponse,
                     CancelTaskResponse,
                 )
+            raise ServerError(error=TaskNotFoundError())
         except ServerError as e:
             return CancelTaskResponse(
                 root=JSONRPCErrorResponse(
-                    id=request.id, error=e.error
+                    id=request.id, error=e.error if e.error else InternalError()
                 )
             )
 
     # tasks/resubscribe
     async def on_resubscribe_to_task(
         self, request: TaskResubscriptionRequest
-    ) ->  AsyncIterable[SendStreamingMessageResponse]:
+    ) -> AsyncIterable[SendStreamingMessageResponse]:
         try:
-            async for event in self.request_handler.on_resubscribe_to_task(request.params):
+            async for event in self.request_handler.on_resubscribe_to_task(
+                request.params
+            ):
                 yield prepare_response_object(
                     request.id,
                     event,
-                    (Task, Message, TaskArtifactUpdateEvent, TaskStatusUpdateEvent),
+                    (
+                        Task,
+                        Message,
+                        TaskArtifactUpdateEvent,
+                        TaskStatusUpdateEvent,
+                    ),
                     SendStreamingMessageSuccessResponse,
                     SendStreamingMessageResponse,
                 )
         except ServerError as e:
             yield SendStreamingMessageResponse(
                 root=JSONRPCErrorResponse(
-                    id=request.id, error=e.error
+                    id=request.id, error=e.error if e.error else InternalError()
                 )
             )
 
@@ -155,19 +163,22 @@ class JSONRPCHandler:
         self, request: GetTaskPushNotificationConfigRequest
     ) -> GetTaskPushNotificationConfigResponse:
         try:
-            config = await self.request_handler.on_get_push_notification(
-                request.params)
+            config = (
+                await self.request_handler.on_get_task_push_notification_config(
+                    request.params
+                )
+            )
             return prepare_response_object(
                 request.id,
                 config,
                 (TaskPushNotificationConfig,),
-                GetTaskPushNotificationSuccessResponse,
-                GetTaskPushNotificationResponse
+                GetTaskPushNotificationConfigSuccessResponse,
+                GetTaskPushNotificationConfigResponse,
             )
         except ServerError as e:
-            return GetTaskPushNotificationResponse(
+            return GetTaskPushNotificationConfigResponse(
                 root=JSONRPCErrorResponse(
-                    id=request.id, error=e.error
+                    id=request.id, error=e.error if e.error else InternalError()
                 )
             )
 
@@ -176,19 +187,22 @@ class JSONRPCHandler:
         self, request: SetTaskPushNotificationConfigRequest
     ) -> SetTaskPushNotificationConfigResponse:
         try:
-            config = await self.request_handler.on_set_push_notification(
-                request.params)
+            config = (
+                await self.request_handler.on_set_task_push_notification_config(
+                    request.params
+                )
+            )
             return prepare_response_object(
                 request.id,
                 config,
                 (TaskPushNotificationConfig,),
                 SetTaskPushNotificationConfigSuccessResponse,
-                SetTaskPushNotificationConfigResponse
+                SetTaskPushNotificationConfigResponse,
             )
         except ServerError as e:
             return SetTaskPushNotificationConfigResponse(
                 root=JSONRPCErrorResponse(
-                    id=request.id, error=e.error
+                    id=request.id, error=e.error if e.error else InternalError()
                 )
             )
 
@@ -196,17 +210,18 @@ class JSONRPCHandler:
     async def on_get_task(self, request: GetTaskRequest) -> GetTaskResponse:
         try:
             task = await self.request_handler.on_get_task(request.params)
-            result = prepare_response_object(
-                request.id,
-                task,
-                (Task,),
-                GetTaskSuccessResponse,
-                GetTaskResponse,
-            )
-            return result
+            if task:
+                return prepare_response_object(
+                    request.id,
+                    task,
+                    (Task,),
+                    GetTaskSuccessResponse,
+                    GetTaskResponse,
+                )
+            raise ServerError(error=TaskNotFoundError())
         except ServerError as e:
             return GetTaskResponse(
                 root=JSONRPCErrorResponse(
-                    id=request.id, error=e.error
+                    id=request.id, error=e.error if e.error else InternalError()
                 )
             )
