@@ -1,4 +1,3 @@
-
 from typing import Any
 from unittest.mock import AsyncMock
 import pytest
@@ -24,10 +23,12 @@ MINIMAL_TASK: dict[str, Any] = {
     'type': 'task',
 }
 
+
 @pytest.fixture
 def mock_task_store() -> AsyncMock:
     """Fixture for a mock TaskStore."""
     return AsyncMock()
+
 
 @pytest.fixture
 def task_manager(mock_task_store: AsyncMock) -> TaskManager:
@@ -38,6 +39,7 @@ def task_manager(mock_task_store: AsyncMock) -> TaskManager:
         task_store=mock_task_store,
         initial_message=None,
     )
+
 
 @pytest.mark.asyncio
 async def test_get_task_existing(
@@ -50,6 +52,7 @@ async def test_get_task_existing(
     assert retrieved_task == expected_task
     mock_task_store.get.assert_called_once_with(MINIMAL_TASK['id'])
 
+
 @pytest.mark.asyncio
 async def test_get_task_nonexistent(
     task_manager: TaskManager, mock_task_store: AsyncMock
@@ -60,6 +63,7 @@ async def test_get_task_nonexistent(
     assert retrieved_task is None
     mock_task_store.get.assert_called_once_with(MINIMAL_TASK['id'])
 
+
 @pytest.mark.asyncio
 async def test_save_task_event_new_task(
     task_manager: TaskManager, mock_task_store: AsyncMock
@@ -68,6 +72,7 @@ async def test_save_task_event_new_task(
     task = Task(**MINIMAL_TASK)
     await task_manager.save_task_event(task)
     mock_task_store.save.assert_called_once_with(task)
+
 
 @pytest.mark.asyncio
 async def test_save_task_event_status_update(
@@ -95,6 +100,7 @@ async def test_save_task_event_status_update(
     updated_task.status = new_status
     mock_task_store.save.assert_called_once_with(updated_task)
 
+
 @pytest.mark.asyncio
 async def test_save_task_event_artifact_update(
     task_manager: TaskManager, mock_task_store: AsyncMock
@@ -117,6 +123,7 @@ async def test_save_task_event_artifact_update(
     updated_task.artifacts = [new_artifact]
     mock_task_store.save.assert_called_once_with(updated_task)
 
+
 @pytest.mark.asyncio
 async def test_ensure_task_existing(
     task_manager: TaskManager, mock_task_store: AsyncMock
@@ -133,6 +140,8 @@ async def test_ensure_task_existing(
     retrieved_task = await task_manager.ensure_task(event)
     assert retrieved_task == expected_task
     mock_task_store.get.assert_called_once_with(MINIMAL_TASK['id'])
+
+
 @pytest.mark.asyncio
 async def test_ensure_task_nonexistent(
     mock_task_store: AsyncMock,
@@ -140,7 +149,10 @@ async def test_ensure_task_nonexistent(
     """Test ensuring a non-existent task (creates a new one)."""
     mock_task_store.get.return_value = None
     task_manager_without_id = TaskManager(
-        task_id=None, context_id=None, task_store=mock_task_store, initial_message=None,
+        task_id=None,
+        context_id=None,
+        task_store=mock_task_store,
+        initial_message=None,
     )
     event = TaskStatusUpdateEvent(
         taskId='new-task',
@@ -155,6 +167,8 @@ async def test_ensure_task_nonexistent(
     mock_task_store.save.assert_called_once_with(new_task)
     assert task_manager_without_id.task_id == 'new-task'
     assert task_manager_without_id.context_id == 'some-context'
+
+
 def test_init_task_obj(task_manager: TaskManager) -> None:
     """Test initializing a new task object."""
     new_task = task_manager._init_task_obj('new-task', 'new-context')  # type: ignore
@@ -162,6 +176,7 @@ def test_init_task_obj(task_manager: TaskManager) -> None:
     assert new_task.contextId == 'new-context'
     assert new_task.status.state == TaskState.submitted
     assert new_task.history == []
+
 
 @pytest.mark.asyncio
 async def test_save_task(
@@ -172,13 +187,17 @@ async def test_save_task(
     await task_manager._save_task(task)  # type: ignore
     mock_task_store.save.assert_called_once_with(task)
 
+
 @pytest.mark.asyncio
 async def test_save_task_event_new_task_no_task_id(
     mock_task_store: AsyncMock,
 ) -> None:
     """Test saving a task event without task id in TaskManager."""
     task_manager_without_id = TaskManager(
-        task_id=None, context_id=None, task_store=mock_task_store, initial_message=None,
+        task_id=None,
+        context_id=None,
+        task_store=mock_task_store,
+        initial_message=None,
     )
     task_data: dict[str, Any] = {
         'id': 'new-task-id',
@@ -194,17 +213,22 @@ async def test_save_task_event_new_task_no_task_id(
     # initial submit should be updated to working
     assert task.status.state == TaskState.working
 
+
 @pytest.mark.asyncio
 async def test_get_task_no_task_id(
     mock_task_store: AsyncMock,
 ) -> None:
     """Test getting a task when task_id is not set in TaskManager."""
     task_manager_without_id = TaskManager(
-        task_id=None, context_id='some-context', task_store=mock_task_store, initial_message=None,
+        task_id=None,
+        context_id='some-context',
+        task_store=mock_task_store,
+        initial_message=None,
     )
     retrieved_task = await task_manager_without_id.get_task()
     assert retrieved_task is None
     mock_task_store.get.assert_not_called()
+
 
 @pytest.mark.asyncio
 async def test_save_task_event_no_task_existing(
@@ -212,7 +236,10 @@ async def test_save_task_event_no_task_existing(
 ) -> None:
     """Test saving an event when no task exists and task_id is not set."""
     task_manager_without_id = TaskManager(
-        task_id=None, context_id=None, task_store=mock_task_store, initial_message=None,
+        task_id=None,
+        context_id=None,
+        task_store=mock_task_store,
+        initial_message=None,
     )
     mock_task_store.get.return_value = None
     event = TaskStatusUpdateEvent(
@@ -231,4 +258,3 @@ async def test_save_task_event_no_task_existing(
     assert saved_task.status.state == TaskState.completed
     assert task_manager_without_id.task_id == 'event-task-id'
     assert task_manager_without_id.context_id == 'some-context'
-
