@@ -54,4 +54,4 @@ Here are some additional things to keep in mind during the process:
 
 Complete the following steps to register your GitHub account and be added as a contributor to this repository.
 
-1. Register your GitHub account at [go/GitHub](http://go/github)
+1. Register your GitHub account at [go/GitHub](http://go/github).
