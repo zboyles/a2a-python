@@ -8,6 +8,9 @@ from a2a.server.request_handlers import (
     DefaultRequestHandler,
     JSONRPCHandler,
 )
+from a2a.server.events import (
+    QueueManager,
+)
 from a2a.server.tasks import TaskStore
 from a2a.types import (
     GetTaskRequest,
@@ -375,13 +378,12 @@ class TestJSONRPCtHandler(unittest.IsolatedAsyncioTestCase):
     ) -> None:
         mock_agent_executor = AsyncMock(spec=AgentExecutor)
         mock_task_store = AsyncMock(spec=TaskStore)
-        mock_queue = AsyncMock(spec=EventQueue)
+        mock_queue_manager = AsyncMock(spec=QueueManager)
         request_handler = DefaultRequestHandler(
-            mock_agent_executor, mock_task_store
+            mock_agent_executor, mock_task_store, mock_queue_manager
         )
         handler = JSONRPCHandler(None, request_handler)
         mock_task = Task(**MINIMAL_TASK, history=[])
-        request_handler._task_queue[mock_task.id] = mock_queue
         events: list[Any] = [
             TaskArtifactUpdateEvent(
                 taskId='task_123',
@@ -407,7 +409,7 @@ class TestJSONRPCtHandler(unittest.IsolatedAsyncioTestCase):
             return_value=streaming_coro(),
         ):
             mock_task_store.get.return_value = mock_task
-            mock_queue.tap.return_value = EventQueue()
+            mock_queue_manager.tap.return_value = EventQueue()
             request = TaskResubscriptionRequest(
                 id='1', params=TaskIdParams(id=mock_task.id)
             )

@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import logging
 
 from collections.abc import AsyncGenerator
@@ -39,11 +40,11 @@ class DefaultRequestHandler(RequestHandler):
         self,
         agent_executor: AgentExecutor,
         task_store: TaskStore,
-        queue_manager: QueueManager = InMemoryQueueManager(),
+        queue_manager: QueueManager | None = None,
     ) -> None:
         self.agent_executor = agent_executor
         self.task_store = task_store
-        self._queue_manager = queue_manager
+        self._queue_manager = queue_manager or InMemoryQueueManager()
 
     async def on_get_task(self, params: TaskQueryParams) -> Task | None:
         """Default handler for 'tasks/get'."""
@@ -65,10 +66,11 @@ class DefaultRequestHandler(RequestHandler):
             initial_message=None,
         )
         result_aggregator = ResultAggregator(task_manager)
-        try:
-            queue = await self._queue_manager.tap(task.id)
-        except:
+
+        queue = await self._queue_manager.tap(task.id)
+        if not queue:
             queue = EventQueue()
+
         await self.agent_executor.cancel(
             RequestContext(
                 None,
@@ -134,11 +136,9 @@ class DefaultRequestHandler(RequestHandler):
             return result
         finally:
             await producer_task
-        if task:
-            try:
-                await self._queue_manager.close(task.id)
-            except NoTaskQueue:
-                pass
+            if task:
+                with contextlib.suppress(NoTaskQueue):
+                    await self._queue_manager.close(task.id)
 
     async def on_message_send_stream(
         self, params: MessageSendParams
@@ -182,13 +182,12 @@ class DefaultRequestHandler(RequestHandler):
                         logging.info(
                             'Multiple Task objects created in event stream.'
                         )
-                        yield event
+                yield event
         finally:
             await producer_task
-        try:
-            await self._queue_manager.close(task_id)
-        except NoTaskQueue:
-            pass
+            if task_id:
+                with contextlib.suppress(NoTaskQueue):
+                    await self._queue_manager.close(task_id)
 
     async def on_set_task_push_notification_config(
         self, params: TaskPushNotificationConfig
@@ -209,7 +208,6 @@ class DefaultRequestHandler(RequestHandler):
         task: Task | None = await self.task_store.get(params.id)
         if not task:
             raise ServerError(error=TaskNotFoundError())
-            return
 
         task_manager = TaskManager(
             task_id=task.id,
@@ -220,10 +218,9 @@ class DefaultRequestHandler(RequestHandler):
 
         result_aggregator = ResultAggregator(task_manager)
 
-        try:
-            queue = await self._queue_manager.tap(task.id)
-        except NoTaskQueue as e:
-            raise ServerError(error=TaskNotFoundError()) from e
+        queue = await self._queue_manager.tap(task.id)
+        if not queue:
+            raise ServerError(error=TaskNotFoundError())
 
         consumer = EventConsumer(queue)
         async for event in result_aggregator.consume_and_emit(consumer):
