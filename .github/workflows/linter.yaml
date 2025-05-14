@@ -14,9 +14,6 @@ name: Lint Code Base
 # Start the job on all push #
 #############################
 on:
-  push:
-    branches-ignore: [main]
-    # Remove the line above to run when pushing to main
   pull_request:
     branches: [main]
 
@@ -31,7 +28,7 @@ jobs:
     runs-on: ubuntu-latest
     # if on repo to avoid failing runs on forks
     if: |
-      github.repository == 'google/A2A'
+      github.repository == 'google/a2a-python'
 
     ##################
     # Load all steps #
