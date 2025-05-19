@@ -118,6 +118,55 @@ class AgentSkill(BaseModel):
     """
 
 
+class AuthorizationCodeOAuthFlow(BaseModel):
+    """
+    Configuration details for a supported OAuth Flow
+    """
+
+    authorizationUrl: str
+    """
+    The authorization URL to be used for this flow. This MUST be in the form of a URL. The OAuth2
+    standard requires the use of TLS
+    """
+    refreshUrl: str | None = None
+    """
+    The URL to be used for obtaining refresh tokens. This MUST be in the form of a URL. The OAuth2
+    standard requires the use of TLS.
+    """
+    scopes: dict[str, str]
+    """
+    The available scopes for the OAuth2 security scheme. A map between the scope name and a short
+    description for it. The map MAY be empty.
+    """
+    tokenUrl: str
+    """
+    The token URL to be used for this flow. This MUST be in the form of a URL. The OAuth2 standard
+    requires the use of TLS.
+    """
+
+
+class ClientCredentialsOAuthFlow(BaseModel):
+    """
+    Configuration details for a supported OAuth Flow
+    """
+
+    refreshUrl: str | None = None
+    """
+    The URL to be used for obtaining refresh tokens. This MUST be in the form of a URL. The OAuth2
+    standard requires the use of TLS.
+    """
+    scopes: dict[str, str]
+    """
+    The available scopes for the OAuth2 security scheme. A map between the scope name and a short
+    description for it. The map MAY be empty.
+    """
+    tokenUrl: str
+    """
+    The token URL to be used for this flow. This MUST be in the form of a URL. The OAuth2 standard
+    requires the use of TLS.
+    """
+
+
 class ContentTypeNotSupportedError(BaseModel):
     """
     A2A specific error indicating incompatible content types between request and agent capabilities.
@@ -229,6 +278,28 @@ class HTTPAuthSecurityScheme(BaseModel):
     The value is case-insensitive, as defined in RFC7235.
     """
     type: Literal['http'] = 'http'
+
+
+class ImplicitOAuthFlow(BaseModel):
+    """
+    Configuration details for a supported OAuth Flow
+    """
+
+    authorizationUrl: str
+    """
+    The authorization URL to be used for this flow. This MUST be in the form of a URL. The OAuth2
+    standard requires the use of TLS
+    """
+    refreshUrl: str | None = None
+    """
+    The URL to be used for obtaining refresh tokens. This MUST be in the form of a URL. The OAuth2
+    standard requires the use of TLS.
+    """
+    scopes: dict[str, str]
+    """
+    The available scopes for the OAuth2 security scheme. A map between the scope name and a short
+    description for it. The map MAY be empty.
+    """
 
 
 class InternalError(BaseModel):
@@ -441,56 +512,6 @@ class MethodNotFoundError(BaseModel):
     """
 
 
-class OAuthFlow(BaseModel):
-    """
-    Configuration details for a supported OAuth Flow
-    """
-
-    authorizationUrl: str
-    """
-    The authorization URL to be used for this flow. This MUST be in the form of a URL. The OAuth2
-    standard requires the use of TLS
-    """
-    refreshUrl: str
-    """
-    The URL to be used for obtaining refresh tokens. This MUST be in the form of a URL. The OAuth2
-    standard requires the use of TLS.
-    """
-    scopes: dict[str, str]
-    """
-    The available scopes for the OAuth2 security scheme. A map between the scope name and a short
-    description for it. The map MAY be empty.
-    """
-    tokenUrl: str
-    """
-    The token URL to be used for this flow. This MUST be in the form of a URL. The OAuth2 standard
-    requires the use of TLS.
-    """
-
-
-class OAuthFlows(BaseModel):
-    """
-    Allows configuration of the supported OAuth Flows
-    """
-
-    authorizationCode: OAuthFlow | None = None
-    """
-    Configuration for the OAuth Authorization Code flow. Previously called accessCode in OpenAPI 2.0.
-    """
-    clientCredentials: OAuthFlow | None = None
-    """
-    Configuration for the OAuth Client Credentials flow. Previously called application in OpenAPI 2.0
-    """
-    implicit: OAuthFlow | None = None
-    """
-    Configuration for the OAuth Implicit flow
-    """
-    password: OAuthFlow | None = None
-    """
-    Configuration for the OAuth Resource Owner Password flow
-    """
-
-
 class OpenIdConnectSecurityScheme(BaseModel):
     """
     OpenID Connect security scheme configuration.
@@ -515,6 +536,28 @@ class PartBase(BaseModel):
     metadata: dict[str, Any] | None = None
     """
     Optional metadata associated with the part.
+    """
+
+
+class PasswordOAuthFlow(BaseModel):
+    """
+    Configuration details for a supported OAuth Flow
+    """
+
+    refreshUrl: str | None = None
+    """
+    The URL to be used for obtaining refresh tokens. This MUST be in the form of a URL. The OAuth2
+    standard requires the use of TLS.
+    """
+    scopes: dict[str, str]
+    """
+    The available scopes for the OAuth2 security scheme. A map between the scope name and a short
+    description for it. The map MAY be empty.
+    """
+    tokenUrl: str
+    """
+    The token URL to be used for this flow. This MUST be in the form of a URL. The OAuth2 standard
+    requires the use of TLS.
     """
 
 
@@ -935,46 +978,33 @@ class MessageSendConfiguration(BaseModel):
     """
 
 
-class OAuth2SecurityScheme(BaseModel):
+class OAuthFlows(BaseModel):
     """
-    OAuth2.0 security scheme configuration.
+    Allows configuration of the supported OAuth Flows
     """
 
-    description: str | None = None
+    authorizationCode: AuthorizationCodeOAuthFlow | None = None
     """
-    description of this security scheme
+    Configuration for the OAuth Authorization Code flow. Previously called accessCode in OpenAPI 2.0.
     """
-    flows: OAuthFlows
+    clientCredentials: ClientCredentialsOAuthFlow | None = None
     """
-    An object containing configuration information for the flow types supported.
+    Configuration for the OAuth Client Credentials flow. Previously called application in OpenAPI 2.0
     """
-    type: Literal['oauth2'] = 'oauth2'
+    implicit: ImplicitOAuthFlow | None = None
+    """
+    Configuration for the OAuth Implicit flow
+    """
+    password: PasswordOAuthFlow | None = None
+    """
+    Configuration for the OAuth Resource Owner Password flow
+    """
 
 
 class Part(RootModel[TextPart | FilePart | DataPart]):
     root: TextPart | FilePart | DataPart
     """
     Represents a part of a message, which can be text, a file, or structured data.
-    """
-
-
-class SecurityScheme(
-    RootModel[
-        APIKeySecurityScheme
-        | HTTPAuthSecurityScheme
-        | OAuth2SecurityScheme
-        | OpenIdConnectSecurityScheme
-    ]
-):
-    root: (
-        APIKeySecurityScheme
-        | HTTPAuthSecurityScheme
-        | OAuth2SecurityScheme
-        | OpenIdConnectSecurityScheme
-    )
-    """
-    Mirrors the OpenAPI Security Scheme Object
-    (https://swagger.io/specification/#security-scheme-object)
     """
 
 
@@ -1021,68 +1051,6 @@ class SetTaskPushNotificationConfigSuccessResponse(BaseModel):
     result: TaskPushNotificationConfig
     """
     The result object on success
-    """
-
-
-class AgentCard(BaseModel):
-    """
-    An AgentCard conveys key information:
-    - Overall details (version, name, description, uses)
-    - Skills: A set of capabilities the agent can perform
-    - Default modalities/content types supported by the agent.
-    - Authentication requirements
-    """
-
-    capabilities: AgentCapabilities
-    """
-    Optional capabilities supported by the agent.
-    """
-    defaultInputModes: list[str]
-    """
-    The set of interaction modes that the agent
-    supports across all skills. This can be overridden per-skill.
-    Supported mime types for input.
-    """
-    defaultOutputModes: list[str]
-    """
-    Supported mime types for output.
-    """
-    description: str
-    """
-    A human-readable description of the agent. Used to assist users and
-    other agents in understanding what the agent can do.
-    """
-    documentationUrl: str | None = None
-    """
-    A URL to documentation for the agent.
-    """
-    name: str
-    """
-    Human readable name of the agent.
-    """
-    provider: AgentProvider | None = None
-    """
-    The service provider of the agent
-    """
-    security: list[dict[str, list[str]]] | None = None
-    """
-    Security requirements for contacting the agent.
-    """
-    securitySchemes: dict[str, SecurityScheme] | None = None
-    """
-    Security scheme details used for authenticating with this agent.
-    """
-    skills: list[AgentSkill]
-    """
-    Skills are a unit of capability that an agent can perform.
-    """
-    url: str
-    """
-    A URL to the address the agent is hosted at.
-    """
-    version: str
-    """
-    The version of the agent - format is up to the provider.
     """
 
 
@@ -1175,6 +1143,42 @@ class MessageSendParams(BaseModel):
     metadata: dict[str, Any] | None = None
     """
     extension metadata
+    """
+
+
+class OAuth2SecurityScheme(BaseModel):
+    """
+    OAuth2.0 security scheme configuration.
+    """
+
+    description: str | None = None
+    """
+    description of this security scheme
+    """
+    flows: OAuthFlows
+    """
+    An object containing configuration information for the flow types supported.
+    """
+    type: Literal['oauth2'] = 'oauth2'
+
+
+class SecurityScheme(
+    RootModel[
+        APIKeySecurityScheme
+        | HTTPAuthSecurityScheme
+        | OAuth2SecurityScheme
+        | OpenIdConnectSecurityScheme
+    ]
+):
+    root: (
+        APIKeySecurityScheme
+        | HTTPAuthSecurityScheme
+        | OAuth2SecurityScheme
+        | OpenIdConnectSecurityScheme
+    )
+    """
+    Mirrors the OpenAPI Security Scheme Object
+    (https://swagger.io/specification/#security-scheme-object)
     """
 
 
@@ -1341,6 +1345,68 @@ class A2ARequest(
     )
     """
     A2A supported request types
+    """
+
+
+class AgentCard(BaseModel):
+    """
+    An AgentCard conveys key information:
+    - Overall details (version, name, description, uses)
+    - Skills: A set of capabilities the agent can perform
+    - Default modalities/content types supported by the agent.
+    - Authentication requirements
+    """
+
+    capabilities: AgentCapabilities
+    """
+    Optional capabilities supported by the agent.
+    """
+    defaultInputModes: list[str]
+    """
+    The set of interaction modes that the agent
+    supports across all skills. This can be overridden per-skill.
+    Supported mime types for input.
+    """
+    defaultOutputModes: list[str]
+    """
+    Supported mime types for output.
+    """
+    description: str
+    """
+    A human-readable description of the agent. Used to assist users and
+    other agents in understanding what the agent can do.
+    """
+    documentationUrl: str | None = None
+    """
+    A URL to documentation for the agent.
+    """
+    name: str
+    """
+    Human readable name of the agent.
+    """
+    provider: AgentProvider | None = None
+    """
+    The service provider of the agent
+    """
+    security: list[dict[str, list[str]]] | None = None
+    """
+    Security requirements for contacting the agent.
+    """
+    securitySchemes: dict[str, SecurityScheme] | None = None
+    """
+    Security scheme details used for authenticating with this agent.
+    """
+    skills: list[AgentSkill]
+    """
+    Skills are a unit of capability that an agent can perform.
+    """
+    url: str
+    """
+    A URL to the address the agent is hosted at.
+    """
+    version: str
+    """
+    The version of the agent - format is up to the provider.
     """
 
 
