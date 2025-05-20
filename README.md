@@ -48,8 +48,8 @@ You can also find more examples [here](https://github.com/google/A2A/tree/main/s
 
 ## License
 
-This project is licensed under the terms of the [Apache 2.0 License](LICENSE).
+This project is licensed under the terms of the [Apache 2.0 License](https://raw.githubusercontent.com/google/a2a-python/refs/heads/main/LICENSE).
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines.
+See [CONTRIBUTING.md](https://github.com/google/a2a-python/blob/main/CONTRIBUTING.md) for contribution guidelines.
