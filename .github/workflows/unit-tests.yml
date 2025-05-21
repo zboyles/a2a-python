@@ -24,8 +24,6 @@ jobs:
           POSTGRES_DB: a2a_test
         ports:
           - 5432:5432
-        volumes:
-          - ${{ github.workspace }}/docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
 
     strategy:
       matrix:
@@ -39,8 +37,10 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Set postgres test DSN
+      - name: Set postgres for tests
         run: |
+          sudo apt-get update && sudo apt-get install -y postgresql-client
+          psql -U postgres -d a2a_test -f ${{ github.workspace }}/docker/postgres/init.sql
           export POSTGRES_TEST_DSN="postgresql://postgres:postgres@localhost:5432/a2a_test"
 
       - name: Install uv
