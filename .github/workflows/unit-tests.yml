@@ -40,7 +40,7 @@ jobs:
       - name: Set postgres for tests
         run: |
           sudo apt-get update && sudo apt-get install -y postgresql-client
-          psql -h localhost -p 5432 -U postgres -d a2a_test -f ${{ github.workspace }}/docker/postgres/init.sql
+          PGPASSWORD=postgres psql -h localhost -p 5432 -U postgres -d a2a_test -f ${{ github.workspace }}/docker/postgres/init.sql
           export POSTGRES_TEST_DSN="postgresql://postgres:postgres@localhost:5432/a2a_test"
 
       - name: Install uv
