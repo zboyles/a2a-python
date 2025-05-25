@@ -1,4 +1,14 @@
 excinfo
+fetchrow
+fetchval
 GVsb
+initdb
+isready
 notif
 otherurl
+POSTGRES
+postgres
+postgresql
+drivername
+aiomysql
+DSNs
