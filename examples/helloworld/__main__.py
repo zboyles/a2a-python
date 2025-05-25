@@ -2,12 +2,14 @@ from agent_executor import (
     HelloWorldAgentExecutor,  # type: ignore[import-untyped]
 )
 
-import os
-
 from a2a.server.apps import A2AStarletteApplication
 from a2a.server.request_handlers import DefaultRequestHandler
-from a2a.server.tasks import InMemoryTaskStore, DatabaseTaskStore
-from a2a.types import AgentCapabilities, AgentCard, AgentSkill
+from a2a.server.tasks import InMemoryTaskStore
+from a2a.types import (
+    AgentCapabilities,
+    AgentCard,
+    AgentSkill,
+)
 
 
 if __name__ == '__main__':
@@ -19,7 +21,16 @@ if __name__ == '__main__':
         examples=['hi', 'hello world'],
     )
 
-    agent_card = AgentCard(
+    extended_skill = AgentSkill(
+        id='super_hello_world',
+        name='Returns a SUPER Hello World',
+        description='A more enthusiastic greeting, only for authenticated users.',
+        tags=['hello world', 'super', 'extended'],
+        examples=['super hi', 'give me a super hello'],
+    )
+
+    # This will be the public-facing agent card
+    public_agent_card = AgentCard(
         name='Hello World Agent',
         description='Just a hello world agent',
         url='http://localhost:9999/',
@@ -27,32 +38,31 @@ if __name__ == '__main__':
         defaultInputModes=['text'],
         defaultOutputModes=['text'],
         capabilities=AgentCapabilities(streaming=True),
-        skills=[skill],
+        skills=[skill],  # Only the basic skill for the public card
+        supportsAuthenticatedExtendedCard=True,
     )
 
-    database_url = os.environ.get("DATABASE_URL")
-    task_store_instance: InMemoryTaskStore | DatabaseTaskStore
-
-    if database_url:
-        print(f"Using DatabaseTaskStore with URL: {database_url}")
-        # For this example, we assume create_table=True is desired for the DatabaseTaskStore.
-        # In a production scenario, schema management might be handled separately (e.g., migrations).
-        task_store_instance = DatabaseTaskStore(db_url=database_url, create_table=True)
-        # Note: DatabaseTaskStore.initialize() is async and should ideally be called
-        # during async app startup (e.g., Starlette's on_startup).
-        # Here, we rely on its internal _ensure_initialized() called by its methods.
-    else:
-        print("DATABASE_URL not set, using InMemoryTaskStore.")
-        task_store_instance = InMemoryTaskStore()
+    # This will be the authenticated extended agent card
+    # It includes the additional 'extended_skill'
+    specific_extended_agent_card = public_agent_card.model_copy(
+        update={
+            'name': 'Hello World Agent - Extended Edition', # Different name for clarity
+            'description': 'The full-featured hello world agent for authenticated users.',
+            'version': '1.0.1', # Could even be a different version
+            # Capabilities and other fields like url, defaultInputModes, defaultOutputModes,
+            # supportsAuthenticatedExtendedCard are inherited from public_agent_card unless specified here.
+            'skills': [skill, extended_skill],  # Both skills for the extended card
+        }
+    )
 
     request_handler = DefaultRequestHandler(
         agent_executor=HelloWorldAgentExecutor(),
-        task_store=task_store_instance,
+        task_store=InMemoryTaskStore(),
     )
 
-    server = A2AStarletteApplication(
-        agent_card=agent_card, http_handler=request_handler
-    )
+    server = A2AStarletteApplication(agent_card=public_agent_card,
+                                     http_handler=request_handler,
+                                     extended_agent_card=specific_extended_agent_card)
     import uvicorn
 
     uvicorn.run(server.build(), host='0.0.0.0', port=9999)
