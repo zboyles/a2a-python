@@ -25,9 +25,9 @@ from starlette.routing import Route
 
 from a2a.server.apps import A2AStarletteApplication
 from a2a.server.request_handlers import DefaultRequestHandler
-from a2a.server.tasks import InMemoryTaskStore
+from a2a.server.tasks import InMemoryTaskStore, DatabaseTaskStore # MODIFIED
 from a2a.types import AgentCapabilities, AgentCard, AgentSkill
-
+# os is already imported
 
 load_dotenv()
 
@@ -86,8 +86,18 @@ def main(host: str, port: int):
         )
         return PlainTextResponse('Authentication successful.')
 
+    database_url = os.environ.get("DATABASE_URL")
+    task_store_instance: InMemoryTaskStore | DatabaseTaskStore
+
+    if database_url:
+        print(f"Using DatabaseTaskStore with URL: {database_url} in {__file__}")
+        task_store_instance = DatabaseTaskStore(db_url=database_url, create_table=True)
+    else:
+        print(f"DATABASE_URL not set in {__file__}, using InMemoryTaskStore.")
+        task_store_instance = InMemoryTaskStore()
+
     request_handler = DefaultRequestHandler(
-        agent_executor=agent_executor, task_store=InMemoryTaskStore()
+        agent_executor=agent_executor, task_store=task_store_instance
     )
 
     a2a_app = A2AStarletteApplication(
