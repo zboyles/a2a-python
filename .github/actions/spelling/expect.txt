@@ -9,3 +9,6 @@ otherurl
 POSTGRES
 postgres
 postgresql
+drivername
+aiomysql
+DSNs
