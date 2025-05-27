@@ -6,6 +6,12 @@ import pytest
 import pytest_asyncio
 
 from _pytest.mark.structures import ParameterSet
+
+
+# Skip entire test module if SQLAlchemy is not installed
+pytest.importorskip('sqlalchemy', reason='Database tests require SQLAlchemy')
+
+# Now safe to import SQLAlchemy-dependent modules
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.inspection import inspect
 
