@@ -1,4 +1,13 @@
-from typing import Any, Generic, TypeVar, override
+from typing import TYPE_CHECKING, Any, Generic, TypeVar
+
+
+if TYPE_CHECKING:
+    from typing_extensions import override
+else:
+
+    def override(func):  # noqa: D103
+        return func
+
 
 from pydantic import BaseModel
 
