@@ -163,9 +163,9 @@ def create_task_model(
         @override
         def __repr__(self) -> str:
             """Return a string representation of the task."""
-            repr_template = '<TaskModel[{TBL}](id="{ID}", contextId="{CTX_ID}", status="{STATUS}")>'
+            repr_template = '<TaskModel[{TABLE}](id="{ID}", contextId="{CTX_ID}", status="{STATUS}")>'
             return repr_template.format(
-                TBL=table_name,
+                TABLE=table_name,
                 ID=self.id,
                 CTX_ID=self.contextId,
                 STATUS=self.status,
