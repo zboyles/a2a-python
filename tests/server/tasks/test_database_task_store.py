@@ -1,6 +1,7 @@
 import os
 
 from collections.abc import AsyncGenerator
+from pathlib import Path
 
 import pytest
 import pytest_asyncio
@@ -84,6 +85,19 @@ MINIMAL_TASK_OBJ = Task(
 )
 
 
+@pytest.fixture(scope='session', autouse=True)
+def cleanup_sqlite_files():
+    """Clean up SQLite file::memory: files created during tests."""
+    yield
+
+    sqlite_memory_file = Path('file::memory:')
+    if sqlite_memory_file.exists():
+        try:
+            sqlite_memory_file.unlink()
+        except Exception:
+            pass
+
+
 @pytest_asyncio.fixture(params=DB_CONFIGS)
 async def db_store_parameterized(
     request,
@@ -127,6 +141,14 @@ async def db_store_parameterized(
             async with engine.begin() as conn:
                 await conn.run_sync(Base.metadata.drop_all)
             await engine.dispose()  # Dispose the engine created in the fixture
+
+        if dialect_name == 'sqlite':
+            sqlite_memory_file = Path('file::memory:')
+            if sqlite_memory_file.exists():
+                try:
+                    sqlite_memory_file.unlink()
+                except Exception:
+                    pass
 
 
 @pytest.mark.asyncio
@@ -300,6 +322,109 @@ async def test_update_task(db_store_parameterized: DatabaseTaskStore) -> None:
     assert retrieved_after_update.metadata == {'update_key': 'update_value'}
 
     await db_store_parameterized.delete(task_id)
+
+
+@pytest.mark.asyncio
+async def test_metadata_field_mapping(
+    db_store_parameterized: DatabaseTaskStore,
+) -> None:
+    """Test that metadata field is correctly mapped between Pydantic and SQLAlchemy.
+
+    This test verifies:
+    1. Metadata can be None
+    2. Metadata can be a simple dict
+    3. Metadata can contain nested structures
+    4. Metadata is correctly saved and retrieved
+    5. The mapping between task.metadata and task_metadata column works
+    """
+    # Test 1: Task with no metadata (None)
+    task_no_metadata = Task(
+        id='task-metadata-test-1',
+        contextId='session-meta-1',
+        status=TaskStatus(state=TaskState.submitted),
+        kind='task',
+        metadata=None,
+    )
+    await db_store_parameterized.save(task_no_metadata)
+    retrieved_no_metadata = await db_store_parameterized.get(
+        'task-metadata-test-1'
+    )
+    assert retrieved_no_metadata is not None
+    assert retrieved_no_metadata.metadata is None
+
+    # Test 2: Task with simple metadata
+    simple_metadata = {'key': 'value', 'number': 42, 'boolean': True}
+    task_simple_metadata = Task(
+        id='task-metadata-test-2',
+        contextId='session-meta-2',
+        status=TaskStatus(state=TaskState.working),
+        kind='task',
+        metadata=simple_metadata,
+    )
+    await db_store_parameterized.save(task_simple_metadata)
+    retrieved_simple = await db_store_parameterized.get('task-metadata-test-2')
+    assert retrieved_simple is not None
+    assert retrieved_simple.metadata == simple_metadata
+
+    # Test 3: Task with complex nested metadata
+    complex_metadata = {
+        'level1': {
+            'level2': {
+                'level3': ['a', 'b', 'c'],
+                'numeric': 3.14159,
+            },
+            'array': [1, 2, {'nested': 'value'}],
+        },
+        'special_chars': 'Hello\nWorld\t!',
+        'unicode': '🚀 Unicode test 你好',
+        'null_value': None,
+    }
+    task_complex_metadata = Task(
+        id='task-metadata-test-3',
+        contextId='session-meta-3',
+        status=TaskStatus(state=TaskState.completed),
+        kind='task',
+        metadata=complex_metadata,
+    )
+    await db_store_parameterized.save(task_complex_metadata)
+    retrieved_complex = await db_store_parameterized.get('task-metadata-test-3')
+    assert retrieved_complex is not None
+    assert retrieved_complex.metadata == complex_metadata
+
+    # Test 4: Update metadata from None to dict
+    task_update_metadata = Task(
+        id='task-metadata-test-4',
+        contextId='session-meta-4',
+        status=TaskStatus(state=TaskState.submitted),
+        kind='task',
+        metadata=None,
+    )
+    await db_store_parameterized.save(task_update_metadata)
+
+    # Update metadata
+    task_update_metadata.metadata = {'updated': True, 'timestamp': '2024-01-01'}
+    await db_store_parameterized.save(task_update_metadata)
+
+    retrieved_updated = await db_store_parameterized.get('task-metadata-test-4')
+    assert retrieved_updated is not None
+    assert retrieved_updated.metadata == {
+        'updated': True,
+        'timestamp': '2024-01-01',
+    }
+
+    # Test 5: Update metadata from dict to None
+    task_update_metadata.metadata = None
+    await db_store_parameterized.save(task_update_metadata)
+
+    retrieved_none = await db_store_parameterized.get('task-metadata-test-4')
+    assert retrieved_none is not None
+    assert retrieved_none.metadata is None
+
+    # Cleanup
+    await db_store_parameterized.delete('task-metadata-test-1')
+    await db_store_parameterized.delete('task-metadata-test-2')
+    await db_store_parameterized.delete('task-metadata-test-3')
+    await db_store_parameterized.delete('task-metadata-test-4')
 
 
 # Ensure aiosqlite, asyncpg, and aiomysql are installed in the test environment (added to pyproject.toml).

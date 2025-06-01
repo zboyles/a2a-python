@@ -19,10 +19,7 @@ except ImportError as e:
         "or 'pip install a2a-sdk[sql]'"
     ) from e
 
-from a2a.server.models import (  # TaskModel is our SQLAlchemy model
-    Base,
-    TaskModel,
-)
+from a2a.server.models import Base, TaskModel, create_task_model
 from a2a.server.tasks.task_store import TaskStore
 from a2a.types import Task  # Task is the Pydantic model
 
@@ -40,19 +37,24 @@ class DatabaseTaskStore(TaskStore):
     async_session_maker: async_sessionmaker[AsyncSession]
     create_table: bool
     _initialized: bool
+    task_model: type[TaskModel]
 
     def __init__(
         self,
         db_url: str,
         create_table: bool = True,
+        table_name: str = 'tasks',
     ) -> None:
         """Initializes the DatabaseTaskStore.
 
         Args:
             db_url: Database connection string.
             create_table: If true, create tasks table on initialization.
+            table_name: Name of the database table. Defaults to 'tasks'.
         """
-        logger.debug(f'Initializing DatabaseTaskStore with DB URL: {db_url}')
+        logger.debug(
+            f'Initializing DatabaseTaskStore with DB URL: {db_url}, table: {table_name}'
+        )
         self.engine = create_async_engine(
             db_url, echo=False
         )  # Set echo=True for SQL logging
@@ -61,6 +63,12 @@ class DatabaseTaskStore(TaskStore):
         )
         self.create_table = create_table
         self._initialized = False
+
+        self.task_model = (
+            TaskModel
+            if table_name == 'tasks'
+            else create_task_model(table_name)
+        )
 
     async def initialize(self) -> None:
         """Initialize the database and create the table if needed."""
@@ -96,7 +104,9 @@ class DatabaseTaskStore(TaskStore):
         )  # Converts Pydantic Task to dict with JSON-serializable values
 
         async with self.async_session_maker.begin() as session:
-            stmt_select = select(TaskModel).where(TaskModel.id == task.id)
+            stmt_select = select(self.task_model).where(
+                self.task_model.id == task.id
+            )
             result = await session.execute(stmt_select)
             existing_task_model = result.scalar_one_or_none()
 
@@ -119,15 +129,15 @@ class DatabaseTaskStore(TaskStore):
                     ),  # Already a dict
                 }
                 stmt_update = (
-                    update(TaskModel)
-                    .where(TaskModel.id == task.id)
+                    update(self.task_model)
+                    .where(self.task_model.id == task.id)
                     .values(**update_data)
                 )
                 await session.execute(stmt_update)
             else:
                 logger.debug(f'Saving new task {task.id} to the database.')
                 # Map Pydantic fields to database columns
-                new_task_model = TaskModel(
+                new_task_model = self.task_model(
                     id=task_data['id'],
                     contextId=task_data['contextId'],
                     kind=task_data['kind'],
@@ -147,7 +157,7 @@ class DatabaseTaskStore(TaskStore):
         await self._ensure_initialized()
 
         async with self.async_session_maker() as session:
-            stmt = select(TaskModel).where(TaskModel.id == task_id)
+            stmt = select(self.task_model).where(self.task_model.id == task_id)
             result = await session.execute(stmt)
             task_model = result.scalar_one_or_none()
 
@@ -175,7 +185,7 @@ class DatabaseTaskStore(TaskStore):
         await self._ensure_initialized()
 
         async with self.async_session_maker.begin() as session:
-            stmt = delete(TaskModel).where(TaskModel.id == task_id)
+            stmt = delete(self.task_model).where(self.task_model.id == task_id)
             result = await session.execute(stmt)
             # Commit is automatic when using session.begin()
 
